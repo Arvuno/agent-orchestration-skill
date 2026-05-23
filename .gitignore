@@ -1,1 +1,49 @@
+# Dependencies
+node_modules/
+
+# Local orchestration runtime state
+.orchestration/
+.agents/
+.codex/
+.skills/
+
+# Python generated files
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Test and cache outputs
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+coverage
+.coverage
+.nyc_output/
+.cache/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
 logs.txt
+
+# Temporary files
+tmp/
+temp/
+.tmp/
+*.tmp
+*.temp
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+*.swp
+*.swo
+.idea/
+.vscode/
+
