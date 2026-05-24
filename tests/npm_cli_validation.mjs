@@ -110,6 +110,15 @@ symlinkSync(CLI, npmUsageAlias);
 run('mkdir', ['-p', repo]);
 run('git', ['init', '-q'], { cwd: repo });
 
+const globalSkillHome = join(td, 'global-skill-home');
+run('node', [join(ROOT, 'tools', 'install-codex-skill.mjs'), '--strict'], { env: { HOME: globalSkillHome } });
+if (!existsSync(join(globalSkillHome, '.codex', 'skills', 'agent-orchestration-skill', 'SKILL.md'))) {
+  throw new Error('global npm skill installer did not write ~/.codex/skills/agent-orchestration-skill');
+}
+const globalSkillHelp = run('node', [CLI, 'install-skill', '--strict'], { env: { HOME: join(td, 'global-skill-home-cli') } });
+if (!globalSkillHelp.stdout.includes('Installed Codex skill')) throw new Error(`aoc install-skill did not report global skill install: ${globalSkillHelp.stdout}`);
+pass('global Codex skill installer writes ~/.codex/skills');
+
 run('node', [CLI, 'install', repo]);
 if (!existsSync(join(repo, 'skills', 'agent-orchestration-skill', 'scripts', 'aoc_gui.py'))) throw new Error('aoc_gui.py not installed under skills/');
 if (existsSync(join(repo, '.skills'))) throw new Error('legacy .skills directory should not exist after install');
@@ -396,6 +405,7 @@ pass('Codex /root/.codex fallback is permission-safe');
 
 const tuiScrollProbe = `
 import sys
+import curses
 from pathlib import Path
 
 sys.path.insert(0, ${JSON.stringify(scripts)})
@@ -424,6 +434,31 @@ top_target = aoc_tui.selected_session_line(sessions, 0)
 top_scroll = aoc_tui.keep_line_visible(scroll, top_target, 6, len(lines), context_before=2)
 if top_scroll != 0:
     raise AssertionError(f"session viewport did not return to top: {top_scroll}")
+
+initial = aoc_tui.initial_session_index(sessions, "run-12")
+if initial != 12:
+    raise AssertionError(f"explicit initial run did not select run-12: {initial}")
+after_key_selection = min(initial + 1, len(sessions) - 1)
+if after_key_selection != 13:
+    raise AssertionError("simulated down navigation did not advance from initial selection")
+rerender_selection = aoc_tui.initial_session_index(sessions, None, after_key_selection)
+if rerender_selection != 13:
+    raise AssertionError(f"rerender should preserve navigated selection, got {rerender_selection}")
+
+class FakeScreen:
+    def __init__(self, values):
+        self.values = list(values)
+    def timeout(self, _ms):
+        pass
+    def getch(self):
+        return self.values.pop(0) if self.values else -1
+
+if aoc_tui.read_tui_key(FakeScreen([ord("["), ord("B")]), 27) != curses.KEY_DOWN:
+    raise AssertionError("ESC [ B was not decoded as KEY_DOWN")
+if aoc_tui.read_tui_key(FakeScreen([ord("["), ord("A")]), 27) != curses.KEY_UP:
+    raise AssertionError("ESC [ A was not decoded as KEY_UP")
+if aoc_tui.read_tui_key(FakeScreen([]), ord("j")) != ord("j"):
+    raise AssertionError("plain fallback key was not preserved")
 `;
 run('python3', ['-c', tuiScrollProbe]);
 pass('TUI sessions viewport follows Up/Down selection');
@@ -560,6 +595,9 @@ const packedHelp = run('npx', ['--yes', '--package', packedTarball, 'agentic-orc
   env: npmIsolatedEnv
 });
 assertHelpIncludes(packedHelp, codexSessionShimCommands);
+if (!existsSync(join(npmHome, '.codex', 'skills', 'agent-orchestration-skill', 'SKILL.md'))) {
+  throw new Error('packed npm install did not postinstall the Codex skill into HOME/.codex/skills');
+}
 const packedRepo = join(td, 'packed-npx-repo');
 run('mkdir', ['-p', packedRepo]);
 run('git', ['init', '-q'], { cwd: packedRepo });

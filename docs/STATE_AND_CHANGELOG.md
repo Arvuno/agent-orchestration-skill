@@ -57,6 +57,7 @@ Added the focused `/docs` set:
 
 Latest command-docs audit:
 
+- Global npm install now writes the Codex skill to `~/.codex/skills/agent-orchestration-skill`; `aoc install-skill --strict` can refresh it explicitly.
 - Public user docs now prefer `npm install -g agentic-orchestration-control` plus `aoc ...` commands instead of source-tree router examples.
 - GUI examples document both `/api/snapshot` JSON reads and the `/events` SSE stream for realtime inspection.
 - Internal skill references still keep direct bundled Python commands where no public CLI route exists; `SKILL.md` labels those as low-level control-plane operations.

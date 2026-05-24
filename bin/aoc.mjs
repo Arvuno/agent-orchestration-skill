@@ -11,19 +11,20 @@ const SKILL_DIR = join(PKG_ROOT, 'skills', 'agent-orchestration-skill');
 const SCRIPTS = join(SKILL_DIR, 'scripts');
 const INSTALL = join(PKG_ROOT, 'install.sh');
 const COMMAND_CONTRACT_PATH = join(PKG_ROOT, 'tools', 'aoc.commands.json');
+const INSTALL_CODEX_SKILL = join(PKG_ROOT, 'tools', 'install-codex-skill.mjs');
 
 const originalArgv = process.argv.slice(2);
 const invokedName = process.argv[1] ? process.argv[1].split(/[\\/]/).pop() : 'aoc';
 
 const ROUTE_COMMANDS = new Set([
-  'tui', 'control', 'dashboard', 'snapshot', 'gui', 'web', 'install', 'sessions', 'session',
+  'tui', 'control', 'dashboard', 'snapshot', 'gui', 'web', 'install', 'install-skill', 'sessions', 'session',
   'current', 'use', 'import', 'watch', 'search', 'usage', 'report', 'statusline', 'budget',
   'ccusage', 'codex', 'codexui', 'init', 'new-run', 'publish-check', 'stats', 'events',
   'tail', 'memory', 'gates', 'gate', 'doctor', 'help', '-h', '--help', 'version', '-v', '--version'
 ]);
 
 const SHIM_COMMANDS = new Set([
-  'tui', 'control', 'dashboard', 'snapshot', 'gui', 'web', 'sessions', 'session', 'current',
+  'tui', 'control', 'dashboard', 'snapshot', 'gui', 'web', 'install-skill', 'sessions', 'session', 'current',
   'use', 'import', 'watch', 'search', 'init', 'new-run', 'usage', 'report', 'statusline',
   'budget', 'ccusage', 'codex', 'codexui', 'publish-check', 'stats', 'events', 'tail',
   'memory', 'gates', 'gate', 'doctor', 'help', '-h', '--help', 'version', '--version', '-v'
@@ -73,8 +74,8 @@ function printHelp() {
   console.log(`Agentic Orchestration Control
 
 Usage:
-  npx agentic-orchestration-control [command] [options]
-  npx agentic-orchestration-control --repo .
+  aoc [command] [options]
+  agentic-orchestration-control [command] [options]
 
 Common commands:
 ${commonCommandLines().join('\n')}
@@ -95,23 +96,19 @@ Short aliases after local/global install:
   aoc budget 12000            budget check
 
 Examples:
-  npx agentic-orchestration-control install .
-  npx agentic-orchestration-control
-  npx agentic-orchestration-control gui
+  npm install -g agentic-orchestration-control
+  aoc install-skill --strict
+  aoc
+  aoc gui
   aoc init "Fix checkout flow"
   aoc sessions
   aoc import latest
   aoc current
-  npx agentic-orchestration-control sessions
-  npx agentic-orchestration-control import latest
-  npx agentic-orchestration-control current
   aoc use <run_id>
-  npx agentic-orchestration-control use latest
   aoc search checkout
-  npx agentic-orchestration-control search "handoff"
-  npx agentic-orchestration-control usage
-  npx agentic-orchestration-control budget 12000
-  npx agentic-orchestration-control gui --with-codex
+  aoc usage
+  aoc budget 12000
+  aoc gui --with-codex
 `);
 }
 
@@ -548,6 +545,25 @@ function route(rawArgs) {
       }
       if ((res.status ?? 0) !== 0) process.exit(res.status ?? 1);
       refreshInstalledShims(target);
+      return;
+    }
+    case 'install-skill': {
+      if (!existsSync(INSTALL_CODEX_SKILL)) {
+        console.error(`Missing Codex skill installer: ${INSTALL_CODEX_SKILL}`);
+        process.exit(1);
+      }
+      const scriptArgs = rest.length ? rest : [];
+      const res = spawnSync(process.execPath, [INSTALL_CODEX_SKILL, ...scriptArgs], {
+        stdio: 'inherit',
+        cwd: PKG_ROOT,
+        env: process.env,
+        shell: false
+      });
+      if (res.error) {
+        console.error(`Failed to run node: ${res.error.message}`);
+        process.exit(1);
+      }
+      if ((res.status ?? 0) !== 0) process.exit(res.status ?? 1);
       return;
     }
   }

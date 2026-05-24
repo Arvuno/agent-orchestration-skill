@@ -457,6 +457,14 @@ def keep_line_visible(scroll: int, target_line: int, visible_lines: int, total_l
     return max(0, min(scroll, max_scroll))
 
 
+def initial_session_index(sessions: list[dict[str, Any]], run_id_arg: str | None, selected: int = 0) -> int:
+    if run_id_arg and run_id_arg != "latest":
+        for i, s in enumerate(sessions):
+            if s.get("run_id") == run_id_arg:
+                return i
+    return max(0, min(selected, max(0, len(sessions) - 1)))
+
+
 def empty_state_lines() -> list[str]:
     homes = ", ".join(str(p) for p in codex_homes())
     return [
@@ -764,6 +772,43 @@ def safe_add(stdscr: Any, y: int, x: int, text: str, width: int, attr: int = 0) 
         return
 
 
+def read_tui_key(stdscr: Any, first: int) -> int:
+    if first != 27:
+        return first
+    try:
+        stdscr.timeout(25)
+        second = stdscr.getch()
+        if second == -1:
+            return 27
+        seq = [second]
+        if second in (ord("["), ord("O")):
+            for _ in range(6):
+                nxt = stdscr.getch()
+                if nxt == -1:
+                    break
+                seq.append(nxt)
+                if nxt in (ord("A"), ord("B"), ord("C"), ord("D"), ord("~")):
+                    break
+        last = seq[-1] if seq else -1
+        if last == ord("A"):
+            return curses.KEY_UP
+        if last == ord("B"):
+            return curses.KEY_DOWN
+        if last == ord("C"):
+            return curses.KEY_RIGHT
+        if last == ord("D"):
+            return curses.KEY_LEFT
+        if last == ord("~") and len(seq) >= 2:
+            digits = "".join(chr(c) for c in seq[1:-1] if 48 <= c <= 57)
+            if digits == "5":
+                return curses.KEY_PPAGE
+            if digits == "6":
+                return curses.KEY_NPAGE
+    except curses.error:
+        return 27
+    return 27
+
+
 def draw(stdscr: Any, root: Path, run_id_arg: str | None, interval: float) -> None:
     try:
         curses.curs_set(0)
@@ -772,17 +817,16 @@ def draw(stdscr: Any, root: Path, run_id_arg: str | None, interval: float) -> No
     stdscr.keypad(True)
     tab = 0
     selected = 0
+    selected_initialized = False
     scroll = 0
     paused = False
     interval = max(0.5, interval)
     while True:
         stdscr.timeout(-1 if paused else max(100, int(interval * 1000)))
         sessions = load_sessions(root)
-        if run_id_arg and run_id_arg != "latest":
-            for i, s in enumerate(sessions):
-                if s.get("run_id") == run_id_arg:
-                    selected = i
-                    break
+        if not selected_initialized:
+            selected = initial_session_index(sessions, run_id_arg, selected)
+            selected_initialized = True
         selected = max(0, min(selected, max(0, len(sessions) - 1)))
         run_id = sessions[selected].get("run_id") if sessions else None
         stdscr.erase()
@@ -793,6 +837,7 @@ def draw(stdscr: Any, root: Path, run_id_arg: str | None, interval: float) -> No
                 safe_add(stdscr, 1, 0, short("Resize or use --snapshot", w), w)
             stdscr.refresh()
             ch = stdscr.getch()
+            ch = read_tui_key(stdscr, ch)
             if ch in (ord("q"), 27):
                 return
             continue
@@ -802,7 +847,7 @@ def draw(stdscr: Any, root: Path, run_id_arg: str | None, interval: float) -> No
         safe_add(stdscr, 0, 0, title.ljust(w), w, curses.A_REVERSE)
         tabs = "  ".join((f"[{t}]" if i == tab else f" {t} ") for i, t in enumerate(TABS))
         safe_add(stdscr, 1, 0, short(tabs, w).ljust(w), w, curses.A_BOLD)
-        help_line = "Tab/Left/Right views | Up/Down select/scroll | r refresh | p pause | +/- interval | q quit | --snapshot"
+        help_line = "Tab/Left/Right views | Up/Down or j/k select/scroll | r refresh | p pause | +/- interval | q quit"
         safe_add(stdscr, h - 1, 0, short(help_line, w).ljust(w), w, curses.A_REVERSE)
         lines = tab_lines(root, tab, sessions, selected, run_id)
         max_body = h - 4
@@ -819,6 +864,7 @@ def draw(stdscr: Any, root: Path, run_id_arg: str | None, interval: float) -> No
         ch = stdscr.getch()
         if ch == -1:
             continue
+        ch = read_tui_key(stdscr, ch)
         if ch in (ord("q"), 27):
             return
         if ch in (ord("r"),):
@@ -832,22 +878,24 @@ def draw(stdscr: Any, root: Path, run_id_arg: str | None, interval: float) -> No
         if ch in (ord("-"), ord("_")):
             interval = max(0.5, interval - 0.5)
             continue
-        if ch in (curses.KEY_RIGHT, ord("\t")):
+        if ch in (curses.KEY_RIGHT, ord("\t"), ord("l")):
             tab = (tab + 1) % len(TABS)
             scroll = 0
-        elif ch == curses.KEY_LEFT:
+        elif ch in (curses.KEY_LEFT, ord("h")):
             tab = (tab - 1) % len(TABS)
             scroll = 0
-        elif ch == curses.KEY_DOWN:
+        elif ch in (curses.KEY_DOWN, curses.KEY_NPAGE, ord("j")):
+            step = max(1, (h - 5) if ch == curses.KEY_NPAGE else 1)
             if tab == 0:
-                selected = min(selected + 1, max(0, len(sessions) - 1))
+                selected = min(selected + step, max(0, len(sessions) - 1))
             else:
-                scroll += 1
-        elif ch == curses.KEY_UP:
+                scroll += step
+        elif ch in (curses.KEY_UP, curses.KEY_PPAGE, ord("k")):
+            step = max(1, (h - 5) if ch == curses.KEY_PPAGE else 1)
             if tab == 0:
-                selected = max(0, selected - 1)
+                selected = max(0, selected - step)
             else:
-                scroll = max(0, scroll - 1)
+                scroll = max(0, scroll - step)
 
 
 def main() -> None:

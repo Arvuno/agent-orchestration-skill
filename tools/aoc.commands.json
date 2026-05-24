@@ -19,6 +19,7 @@
   ],
   "packageFiles": [
     "tools/aoc.commands.json",
+    "tools/install-codex-skill.mjs",
     "bin/aoc.mjs",
     "install.sh",
     "skills/agent-orchestration-skill/bin/agentic-orchestration-control",
@@ -37,6 +38,7 @@
     { "name": "tui", "aliases": ["control", "dashboard"], "usage": "tui", "common": true, "summary": "Open the terminal control room (default).", "outputModes": ["text", "json"], "target": "scripts/aoc_tui.py" },
     { "name": "gui", "aliases": ["web"], "usage": "gui", "common": true, "summary": "Open the local web GUI.", "outputModes": ["html", "server"], "target": "scripts/aoc_gui.py" },
     { "name": "install", "usage": "install [repo]", "common": true, "summary": "Install the skill pack into a repo.", "outputModes": ["text"], "target": "install.sh", "installedShim": false },
+    { "name": "install-skill", "usage": "install-skill [--strict]", "common": true, "summary": "Install the Codex skill globally into ~/.codex/skills.", "outputModes": ["text"], "target": "tools/install-codex-skill.mjs", "installedShim": false },
     { "name": "sessions", "aliases": ["session"], "usage": "sessions", "common": true, "summary": "List AOC runs and imported Codex sessions.", "outputModes": ["text", "json"], "target": "scripts/codex_session_cli.py sessions" },
     { "name": "current", "usage": "current", "common": true, "summary": "Print the selected run.", "outputModes": ["text", "json"], "target": "scripts/codex_session_cli.py current" },
     { "name": "use", "usage": "use <run|session|path>", "common": true, "summary": "Select an AOC run or import/select a Codex session.", "outputModes": ["text", "json"], "target": "scripts/codex_session_cli.py use" },

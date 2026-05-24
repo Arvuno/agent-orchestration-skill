@@ -4,15 +4,14 @@
   <img src="workflow-diagram.png" alt="Agentic Orchestration Control workflow" width="100%" />
 </p>
 
-Agentic Orchestration Control is an explicit-only npm control room for Codex orchestration. It installs a Codex skill, leaf-worker profiles, local run ledgers, usage reports, Codex session import, and TUI/GUI views into a repository without using hidden `.skills`, `.agents`, or `.codex` package layouts.
+Agentic Orchestration Control is an explicit-only npm control room for Codex orchestration. The global npm package installs the Codex skill into `~/.codex/skills`, and the `aoc` CLI manages local run ledgers, usage reports, Codex session import, and TUI/GUI views.
 
 ## Start In 10 Seconds
 
-Install the published package globally, then install AOC into the repository you are working in:
+Install the published package globally. This installs both the `aoc` CLI and the Codex skill at `~/.codex/skills/agent-orchestration-skill`:
 
 ```bash
 npm install -g agentic-orchestration-control
-aoc install .
 ```
 
 Open the control room:
@@ -66,9 +65,15 @@ An imported Codex session comes from local Codex rollout JSONL files under `AOC_
 
 ## How The Skill Works
 
-The installed `AGENTS.md` keeps the skill explicit-only. The root Codex thread remains the orchestrator, and spawned workers are leaf-only. The package provides subagent profiles and validators, but it does not make model calls by itself.
+The globally installed skill is explicit-only. The root Codex thread remains the orchestrator, and spawned workers are leaf-only. The package provides subagent profiles and validators, but it does not make model calls by itself.
 
-Installed layout:
+Global skill layout:
+
+```text
+~/.codex/skills/agent-orchestration-skill/
+```
+
+Optional repo-local install layout from `aoc install .`:
 
 ```text
 skills/agent-orchestration-skill/

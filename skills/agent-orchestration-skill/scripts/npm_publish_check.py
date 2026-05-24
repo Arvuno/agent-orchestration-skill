@@ -100,7 +100,7 @@ def main() -> None:
             fail(f"forbidden production path present: {forbidden}")
     ok("forbidden legacy/demo paths absent")
 
-    for rel in ["tests/aggressive_validation.py", "tests/npm_cli_validation.mjs", "tools/fix-permissions.mjs"]:
+    for rel in ["tests/aggressive_validation.py", "tests/npm_cli_validation.mjs", "tools/fix-permissions.mjs", "tools/install-codex-skill.mjs"]:
         if not (root / rel).exists():
             fail(f"required validation tool missing: {rel}")
     ok("production validation tools present")
@@ -138,7 +138,7 @@ def main() -> None:
             print(output)
             fail("npm pack --dry-run --json produced no package entries")
         packed_files = [f.get("path", "") for f in pack_entries[0].get("files", []) if isinstance(f, dict)]
-        for needle in ["package.json", "bin/aoc.mjs", "tools/fix-permissions.mjs", "docs/README.md", "skills/agent-orchestration-skill/SKILL.md", "tests/aggressive_validation.py"]:
+        for needle in ["package.json", "bin/aoc.mjs", "tools/fix-permissions.mjs", "tools/install-codex-skill.mjs", "docs/README.md", "skills/agent-orchestration-skill/SKILL.md", "tests/aggressive_validation.py"]:
             if needle not in packed_files:
                 fail(f"npm pack dry run did not include {needle}")
         for bad in [".skills/", ".agents/", ".codex/", "demo_run.py"]:

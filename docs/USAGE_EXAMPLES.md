@@ -1,13 +1,18 @@
 # Usage Examples
 
-These examples use the short `aoc` command after installing the published package globally and installing AOC into a repository:
+These examples use the short `aoc` command after installing the published package globally. The npm install also installs the Codex skill into `~/.codex/skills/agent-orchestration-skill`:
 
 ```bash
 npm install -g agentic-orchestration-control
+```
+
+If you want repo-local shims and an explicit `AGENTS.md` gate, run:
+
+```bash
 aoc install .
 ```
 
-If `aoc` is not on `PATH`, use the local shim:
+If `aoc` is not on `PATH` after a repo-local install, use the local shim:
 
 ```bash
 ./.orchestration/bin/aoc

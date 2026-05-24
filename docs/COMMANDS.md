@@ -9,6 +9,7 @@ The preferred command surface is short and repo-aware:
 ```bash
 aoc
 aoc gui
+aoc install-skill --strict
 aoc init "Fix checkout flow"
 aoc sessions
 aoc import
@@ -45,6 +46,7 @@ Run resolution order:
 | --- | --- |
 | `aoc` | Open the terminal control room. In non-interactive shells it prints a snapshot. |
 | `aoc gui` | Open the local web GUI. Use `--once` for one HTML snapshot. |
+| `aoc install-skill --strict` | Reinstall the Codex skill globally into `~/.codex/skills/agent-orchestration-skill`. |
 | `aoc init "Fix checkout flow"` | Create a run ledger with a generated unique run id. |
 | `aoc sessions` | List native AOC runs and imported Codex sessions. |
 | `aoc import` | Discover and import Codex rollout JSONL sessions. |

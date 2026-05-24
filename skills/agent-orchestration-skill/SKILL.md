@@ -35,7 +35,7 @@ For normal project use, prefer the public CLI:
 ```bash
 npm install -g agentic-orchestration-control
 aoc --help
-aoc install .
+aoc install-skill --strict
 aoc init --repo . --task "<task>"
 aoc tui --repo .
 aoc gui --repo .

@@ -2,8 +2,9 @@
 
 Use this guide to get from a clean checkout to a validated local package. If
 you only want to use the published package, install it globally with
-`npm install -g agentic-orchestration-control` and use the `aoc ...` commands
-shown in `USAGE_EXAMPLES.md`.
+`npm install -g agentic-orchestration-control`. That global install writes the
+Codex skill to `~/.codex/skills/agent-orchestration-skill`; use the `aoc ...`
+commands shown in `USAGE_EXAMPLES.md`.
 
 ## Prerequisites
 

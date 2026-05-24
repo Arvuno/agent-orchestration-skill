@@ -1,8 +1,8 @@
 {
   "name": "agentic-orchestration-control",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "private": false,
-  "description": "npx-first TUI/GUI control room and token-aware orchestration skill for Codex subagents.",
+  "description": "Global Codex skill plus TUI/GUI control room and token-aware orchestration CLI for Codex subagents.",
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -20,6 +20,7 @@
     "doctor": "npm run publish:check",
     "publish:check": "node tools/fix-permissions.mjs --quiet && node bin/aoc.mjs publish-check --pack-dry-run",
     "validate:production": "node tools/fix-permissions.mjs --quiet && npm test && npm run publish:check && npm pack --dry-run",
+    "postinstall": "node tools/install-codex-skill.mjs",
     "prepublishOnly": "npm run validate:production"
   },
   "files": [

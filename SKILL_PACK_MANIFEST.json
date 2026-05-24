@@ -2,6 +2,7 @@
   "package": "agentic-orchestration-control",
   "repository": "https://github.com/ZypherHQ/agent-orchestration-skill",
   "layout": {
+    "global_skill": "~/.codex/skills/agent-orchestration-skill",
     "skill": "skills/agent-orchestration-skill",
     "subagents": "subagents",
     "docs": "docs",
@@ -16,6 +17,7 @@
   ],
   "production_guards": [
     "explicit-only skill invocation",
+    "global Codex skill postinstall",
     "skills/ layout without leading dot",
     "self-install source preservation",
     "leaf-worker subagents",
