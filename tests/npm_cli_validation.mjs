@@ -277,9 +277,21 @@ writeFileSync(directRollout, [
   JSON.stringify({ timestamp: '2026-05-24T11:00:01Z', role: 'user', content: 'Direct shim checkout import' }),
   JSON.stringify({ timestamp: '2026-05-24T11:00:02Z', role: 'assistant', content: 'Direct shim import visible.' })
 ].join('\n') + '\n', 'utf8');
-const directImport = parseJsonResult(run(directShim, ['import', directRollout, '--json'], { cwd: directRepo }), 'direct bash shim import');
+const directEmptyHome = join(td, 'direct-empty-home');
+mkdirSync(directEmptyHome, { recursive: true });
+const directImportEnv = { HOME: directEmptyHome };
+const directImportRunOpts = { cwd: directRepo, env: directImportEnv, envUnset: ['AOC_CODEX_HOME', 'CODEX_HOME'] };
+const directImport = parseJsonResult(run(directShim, ['import', directRollout, '--json'], directImportRunOpts), 'direct bash shim import');
 if (directImport.run_id !== 'codex-direct-shim-session') throw new Error(`direct bash shim import used unstable run id: ${JSON.stringify(directImport)}`);
-const directWatch = parseJsonResult(run(directShim, ['watch', directRollout, '--once', '--json'], { cwd: directRepo }), 'direct bash shim watch --once');
+const directGlobalImport = parseJsonResult(run(directShim, ['--repo', directRepo, 'import', directRollout, '--json'], { cwd: td, env: directImportEnv, envUnset: ['AOC_CODEX_HOME', 'CODEX_HOME'] }), 'direct bash shim import with global repo');
+if (directGlobalImport.run_id !== 'codex-direct-shim-session') throw new Error(`direct bash shim import with global repo lost explicit path target: ${JSON.stringify(directGlobalImport)}`);
+const directLatestOpts = { cwd: directRepo, env: { HOME: directEmptyHome, AOC_CODEX_HOME: directCodexHome }, envUnset: ['CODEX_HOME'] };
+const directLatestImport = parseJsonResult(run(directShim, ['import', '--no-current', 'latest', '--json'], directLatestOpts), 'direct bash shim import --no-current latest');
+if (directLatestImport.run_id !== 'codex-direct-shim-session') throw new Error(`direct bash shim import --no-current latest did not pin latest in place: ${JSON.stringify(directLatestImport)}`);
+const directLatestWatch = parseJsonResult(run(directShim, ['watch', '--no-current', 'latest', '--once', '--json'], directLatestOpts), 'direct bash shim watch --no-current latest --once');
+if (!Array.isArray(directLatestWatch) || !directLatestWatch.some(r => r.run_id === 'codex-direct-shim-session')) throw new Error(`direct bash shim watch --no-current latest did not pin latest in place: ${JSON.stringify(directLatestWatch)}`);
+pass('direct bash install.sh aoc shim pins latest after import/watch flags');
+const directWatch = parseJsonResult(run(directShim, ['watch', directRollout, '--once', '--json'], directImportRunOpts), 'direct bash shim watch --once');
 if (!Array.isArray(directWatch) || !directWatch.some(r => r.run_id === 'codex-direct-shim-session')) throw new Error(`direct bash shim watch did not refresh imported session: ${JSON.stringify(directWatch)}`);
 const directSearch = parseJsonResult(run(directShim, ['search', 'checkout', '--json'], { cwd: directRepo }), 'direct bash shim search');
 if (!Array.isArray(directSearch) || !directSearch.some(r => r.run_id === 'codex-direct-shim-session')) throw new Error(`direct bash shim search did not find imported session: ${JSON.stringify(directSearch)}`);

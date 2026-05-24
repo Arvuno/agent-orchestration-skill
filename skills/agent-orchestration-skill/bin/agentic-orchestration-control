@@ -11,7 +11,6 @@ SELECTED_RUN_ID=""
 RUN_SOURCE="none"
 JSON=0
 QUIET=0
-VERBOSE=0
 NO_OPEN=0
 REST=()
 
@@ -152,7 +151,6 @@ parse_args() {
         QUIET=1
         shift ;;
       --verbose)
-        VERBOSE=1
         shift ;;
       --no-open)
         NO_OPEN=1
@@ -365,15 +363,50 @@ pin_explicit_codex_latest() {
     printf '%s\0' "$@"
     return 0
   fi
-  if [[ $# -eq 0 ]]; then
-    set -- "$latest_path"
-  elif [[ "$1" == "latest" ]]; then
-    shift
-    set -- "$latest_path" "$@"
-  elif [[ "$1" == -* ]]; then
-    set -- "$@" "$latest_path"
+  local -a args=("$@")
+  local target_index=-1
+  local missing_option_value=0
+  local i=0 arg
+  while (( i < ${#args[@]} )); do
+    arg="${args[$i]}"
+    if [[ "$arg" == "--" ]]; then
+      if (( i + 1 < ${#args[@]} )); then
+        target_index=$((i + 1))
+      fi
+      break
+    fi
+    case "$arg" in
+      --codex-home|--limit|--interval|--repo|--root|--run-id|--run|--host|--port|--auth-token)
+        if (( i + 1 < ${#args[@]} )); then
+          i=$((i + 2))
+        else
+          missing_option_value=1
+          i=$((i + 1))
+        fi
+        continue ;;
+      --codex-home=*|--limit=*|--interval=*|--repo=*|--root=*|--run-id=*|--run=*|--host=*|--port=*|--auth-token=*)
+        i=$((i + 1))
+        continue ;;
+    esac
+    if [[ "$arg" == -* ]]; then
+      i=$((i + 1))
+      continue
+    fi
+    target_index="$i"
+    break
+  done
+  if (( missing_option_value )); then
+    printf '%s\0' "${args[@]}"
+    return 0
   fi
-  printf '%s\0' "$@"
+  if [[ $# -eq 0 ]]; then
+    args=("$latest_path")
+  elif (( target_index < 0 )); then
+    args+=("$latest_path")
+  elif [[ "${args[$target_index]}" == "latest" ]]; then
+    args[target_index]="$latest_path"
+  fi
+  printf '%s\0' "${args[@]}"
 }
 
 codex_target_args() {

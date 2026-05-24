@@ -557,13 +557,19 @@ def import_one(root: Path, path: Path, *, make_current: bool = True) -> dict[str
 
 
 def resolve_session_target(root: Path, home: Path | Iterable[Path], target: str | None, run_id: str | None = None) -> list[Path]:
+    if run_id:
+        target = run_id
+    if target and target not in {"latest", "current", "all"}:
+        candidate = Path(target).expanduser()
+        if safe_path_exists(candidate):
+            resolved = safe_path_resolve(candidate)
+            if resolved:
+                return [resolved]
     files = iter_session_files(home)
     if not files:
         homes = [home] if isinstance(home, Path) else list(home)
         searched = ", ".join(str(p / "sessions") for p in homes)
         raise SystemExit(f"No Codex rollout sessions found under {searched}")
-    if run_id:
-        target = run_id
     if not target or target in {"latest", "current"}:
         if target == "current":
             selected = resolve_selected_run(root, "current")
@@ -575,11 +581,6 @@ def resolve_session_target(root: Path, home: Path | Iterable[Path], target: str 
         return [files[-1]]
     if target == "all":
         return files
-    candidate = Path(target).expanduser()
-    if safe_path_exists(candidate):
-        resolved = safe_path_resolve(candidate)
-        if resolved:
-            return [resolved]
     wanted = safe_slug(target, fallback="target")
     matches = []
     for path in files:
