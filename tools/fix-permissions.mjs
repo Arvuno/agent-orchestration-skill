@@ -13,8 +13,7 @@ const files = [
   'skills/agent-orchestration-skill/bin/agentic-orchestration-usage',
   'skills/agent-orchestration-skill/bin/aoc',
   'skills/agent-orchestration-skill/bin/aoc-gui',
-  'skills/agent-orchestration-skill/bin/aoc-usage',
-  'skills/agent-orchestration-skill/scripts/codex_leaf_exec.sh'
+  'skills/agent-orchestration-skill/bin/aoc-usage'
 ];
 let changed = 0;
 for (const rel of files) {

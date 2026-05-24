@@ -62,7 +62,6 @@ function installCodexSkill() {
     'bin/aoc',
     'bin/aoc-gui',
     'bin/aoc-usage',
-    'scripts/codex_leaf_exec.sh',
   ]) {
     const p = join(dst, rel);
     if (existsSync(p)) chmodSync(p, 0o755);

@@ -4,13 +4,14 @@ Goal: spawned subagents are workers, not orchestrators. Only the root session ma
 
 ## Why this exists
 
-`agents.max_depth = 1` is useful as a fallback, but worker containment must be enforced at multiple layers:
+Worker containment must be enforced at multiple layers:
 
-1. Root config keeps `[agents].max_depth = 1`.
+1. The root orchestrator is the only session allowed to spawn native Codex subagents.
 2. Every custom worker TOML sets `[features].multi_agent = false`.
-3. Every custom worker TOML sets `[agents].max_depth = 0` and `[agents].max_threads = 1`.
+3. Every custom worker TOML prevents nested fan-out through its agent/thread limits.
 4. Every worker prompt/Dispatch Packet says `Do not spawn/request/recommend child agents`.
-5. Workers return `ESCALATE_TO_PARENT` instead of delegating.
+5. Handoff and context coverage validators reject nested-delegation fields and multi-agent tool names.
+6. Workers return `ESCALATE_TO_PARENT` instead of delegating.
 
 ## Worker response when blocked
 

@@ -142,7 +142,7 @@ def main() -> None:
                 problems.append(f"AGENTS.md still permits implicit orchestration: {phrase}")
 
     skill_root = root / "skills" / "agent-orchestration-skill"
-    for script in ["codex_leaf_exec.sh", "context_capsule.py", "context_coverage_gate.py", "handoff_validate.py", "dispatch_compiler.py", "event_emit.py", "session_index.py", "event_tail.py", "orchestration_stats.py", "control_gate.py", "memory_index.py", "aoc_tui.py"]:
+    for script in ["context_capsule.py", "context_coverage_gate.py", "handoff_validate.py", "dispatch_compiler.py", "event_emit.py", "session_index.py", "event_tail.py", "orchestration_stats.py", "control_gate.py", "memory_index.py", "aoc_tui.py"]:
         if not (skill_root / "scripts" / script).exists():
             problems.append(f"Missing required script: {script}")
     for ref in ["context-capsule.md", "context-coverage-gate.md", "control-room.md", "event-bus.md", "stop-gates.md"]:

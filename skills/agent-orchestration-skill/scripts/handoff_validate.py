@@ -22,7 +22,19 @@ except Exception:
 from typing import Any
 
 BASE_REQUIRED = ["STATUS", "SUMMARY", "VALIDATION"]
-FORBIDDEN = ["next_handoff", "target_agent", "spawn_agent", "wait_agent", "resume_agent", "$agent-orchestration-skill"]
+FORBIDDEN = [
+    "next_handoff",
+    "target_agent",
+    "spawn_agent",
+    "spawn_agents_on_csv",
+    "send_input",
+    "wait_agent",
+    "resume_agent",
+    "close_agent",
+    "child subagent",
+    "child subagents",
+    "$agent-orchestration-skill",
+]
 FIELD_ALIASES = {
     "STATUS": ["status"],
     "SUMMARY": ["summary"],

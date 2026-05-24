@@ -921,7 +921,10 @@ def main() -> None:
     if args.snapshot or not sys.stdout.isatty() or os.environ.get("TERM", "") in {"", "dumb"}:
         print(snapshot(root, args.run_id))
         return
-    curses.wrapper(draw, root, args.run_id, args.interval)
+    try:
+        curses.wrapper(draw, root, args.run_id, args.interval)
+    except KeyboardInterrupt:
+        return
 
 
 if __name__ == "__main__":

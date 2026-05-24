@@ -21,7 +21,19 @@ except Exception:
     emit_event = None  # type: ignore
 from typing import Any
 
-FORBIDDEN = ["next_handoff", "target_agent", "spawn_agent", "wait_agent", "resume_agent", "$agent-orchestration-skill"]
+FORBIDDEN = [
+    "next_handoff",
+    "target_agent",
+    "spawn_agent",
+    "spawn_agents_on_csv",
+    "send_input",
+    "wait_agent",
+    "resume_agent",
+    "close_agent",
+    "child subagent",
+    "child subagents",
+    "$agent-orchestration-skill",
+]
 SECTION_HEADERS = {
     "ROLE:", "MODE / REASONING BUDGET:", "OBJECTIVE:", "SCOPE OWNERSHIP:",
     "MUST READ BEFORE EDITING:", "FILES / AREAS ALLOWED:", "FILES / AREAS FORBIDDEN:",

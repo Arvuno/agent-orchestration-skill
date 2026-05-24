@@ -163,7 +163,6 @@ def validate_static() -> None:
         SKILL / "bin" / "aoc-gui",
         SKILL / "bin" / "agentic-orchestration-usage",
         SKILL / "bin" / "aoc-usage",
-        SCRIPTS / "codex_leaf_exec.sh",
     ]
     for exe in required_execs:
         assert_exec(exe)
