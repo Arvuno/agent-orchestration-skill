@@ -64,6 +64,9 @@ def estimate(
     if size in {"XS", "S", "M"} and any(infer_reasoning(a, reasoning) == "xhigh" for a in agents):
         hard_failures.append("xhigh is not allowed for XS/S/M orchestration.")
         recommendations.append("Use medium for normal writes, high for complex writes, and reserve xhigh for large read-only strategy.")
+    if any(infer_reasoning(a, reasoning) == "xhigh" and any(k in a for k in ["scout", "mapper", "researcher", "reviewer", "router", "finalizer"]) for a in agents):
+        hard_failures.append("xhigh is not allowed for scout/mapper/researcher/reviewer/router/finalizer workers.")
+        recommendations.append("Use low/medium for research and high only for focused security or regression review.")
     if dispatch_chars > 7000:
         hard_failures.append(f"Dispatch Packet too large: {dispatch_chars} chars > 7000")
         recommendations.append("Pass a narrower Context Capsule slice instead of broadcasting full context.")

@@ -33,12 +33,18 @@ If the answer is no, do not spawn.
 - It keeps noisy logs/tests/browser output out of the root context.
 - It owns a complete implementation bundle.
 - It provides independent verification or browser evidence.
+- A mapper/scout will inspect a genuinely different surface or reduce unknown ownership across broad independent domains before implementation.
 
 ## Do not spawn when
 
 - The work is a known one-file fix and a single loop can do inspect+patch+test.
 - The agent would only read one file and report back.
 - The scout would read the same files the implementer must read anyway.
+- The docs/research worker would only repeat the root's bounded docs lookup.
+- A bounded read-only review already contains the review focus and target surfaces; use root synthesis or one focused reviewer, not multiple scouts.
+- The only reason for `xhigh` is “research”, “review”, “audit”, “mapper”, “router”, or “finalizer”.
+- The user says "go deep" but the work is a cohesive implementation task; deepen coverage and verification inside one worker instead.
+- The user asked only to map/research/audit/inventory/discover; do not add implementers or reviewers until asked to proceed.
 - File ownership overlaps with another active write agent.
 - The only purpose is to satisfy a multiagent habit.
 - The Dispatch Packet has become large because the scope is unclear.

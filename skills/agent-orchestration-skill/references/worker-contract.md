@@ -37,4 +37,4 @@ RISKS:
 PARENT_ACTION:
 ```
 
-Workers must not include `target_agent`, `next_handoff`, or child-agent plans unless the user explicitly requested those fields.
+Workers must not include `target_agent`, `next_handoff`, routing plans, or child-agent plans. The root orchestrator owns routing.

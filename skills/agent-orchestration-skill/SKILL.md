@@ -29,6 +29,22 @@ LEAF_EXEC_MODE. You are a <role> leaf worker. Do not spawn agents. Do not invoke
 
 Spawned workers are leaf workers. They must not spawn, request, recommend, coordinate, or plan child subagents. If a worker needs another worker, it must return `ESCALATE_TO_PARENT` with the blocker and let the root orchestrator decide.
 
+## Step 0.2 - Immediate AOC run attachment
+
+When this skill is invoked in the root session, attach to AOC before docs lookup, Context Capsule creation, DAG planning, or worker spawning:
+
+```bash
+aoc current --repo . --json
+```
+
+If no current run exists for the repo, initialize one immediately:
+
+```bash
+aoc init --repo . --task "<task derived from the user prompt>" --json
+```
+
+Store the selected `run_id` in root context and use it for every later event, capsule, dispatch, handoff, verification record, and final summary. Do not create a second run if `aoc current` already selected an active repo run. Emit a compact `skill_invoked` event after attach/init when a run ledger exists.
+
 ## Prime directive
 
 Act as a **task compiler, context-preserving control-plane operator, and event-driven run supervisor**, not a prompt broadcaster. Classify the work, preserve the essential context, choose the cheapest adequate reasoning tier, batch related actions, compile minimal Dispatch Packets, track state, and collect concise Handoff Packets. The Context Capsule is persistent storage; a Dispatch Packet is only a small scoped slice for one worker. The capsule stays on disk; workers receive only the narrow slice they need.
@@ -70,6 +86,11 @@ AOC_SKILL_DIR="${AOC_SKILL_DIR:-${CODEX_HOME:-$HOME/.codex}/skills/agent-orchest
 12. **Plan and budget gates before broad work:** medium/large tasks need a compact phase plan and budget check before implementation.
 13. **Inspectable state:** when a run ledger exists, emit compact events so the control-room TUI can show sessions, worker lanes, gates, evidence, and memory without parsing raw logs.
 14. **Native spawn only:** launch workers through native Codex subagent spawning. Do not shell out to external CLI processes for orchestration workers.
+15. **Run lifecycle first:** attach/init the AOC run before any broad research, capsule, DAG, or worker spawn so the control room can show the whole run.
+16. **No empty capsules for M/L/XL:** medium and larger runs must not create a Context Capsule with zero `must_read` entries. If ownership is unclear, first identify required files/areas, then create or update the capsule before dispatch.
+17. **No xhigh for short read-only work:** read-only reviews, security reviews with a bounded focus, docs lookups, evidence checks, scouts, mappers, routers, and finalizers must not use `xhigh`. Use root synthesis or one focused `medium`/`high` reviewer.
+18. **No non-action workers:** do not spawn a mapper/scout/docs researcher that only reads the same files the implementer must read. For cohesive implementation tasks, dispatch one implementer with context coverage instead. “Go deep” means stricter coverage and verification, not more agents.
+19. **Map-only stays read-only:** if the user asks only to map, research, audit, inventory, or discover, spawn at most one read-only worker and do not add implementers/reviewers unless the user asks to proceed.
 
 ## Step 1 — Classify before spawning
 
@@ -97,16 +118,22 @@ Use `$AOC_SKILL_DIR/scripts/orchestration_decider.py` when useful.
 
 Do not spawn agents just to satisfy a habit. Spawn only when the worker has a meaningful bundle of work or isolates noisy verification/browser output. A useful worker must perform at least two valuable actions, such as inspect + patch, patch + validate, browser reproduce + evidence, or mapping + ownership summary.
 
+Mapper/scout hard stop: do not spawn a read-only mapper if the implementer must read the same files anyway. A mapper is allowed only when it inspects a substantially different surface, reduces unknown ownership across broad independent domains, or the root cannot compile a safe implementation Dispatch Packet without it. Otherwise one implementer owns context coverage, inspection, patching, focused validation, and handoff.
+
 ## Step 3 — Preserve context before dispatch
 
 For every task with more than one phase or worker, create/update a Context Capsule. It is the root-owned source of truth for facts that must not be lost when a new subagent context opens. It is **not** prompt payload and must not be pasted wholesale into every worker prompt.
+
+For M/L/XL runs, do not initialize a capsule with zero `must_read` entries. Include the specific files/areas a worker must inspect before editing. If the first pass cannot identify exact files, perform a bounded read-only ownership scout first, then create/update the capsule with the discovered `must_read` list before any write worker is spawned.
 
 ```bash
 python3 "$AOC_SKILL_DIR/scripts/context_capsule.py" init \
   --task "<task>" \
   --goal "<goal>" \
+  --run-id <run_id> \
   --must-read path/to/file_a \
   --must-read path/to/file_b \
+  --require-must-read \
   --acceptance "<observable acceptance criterion>" \
   --validation "<command or QA check>" \
   --out .orchestration/context_capsule.json
@@ -133,13 +160,14 @@ Read `references/context-capsule.md` when needed.
 
 ## Step 4 — Create control-plane state when needed
 
-For XS/S, avoid unnecessary artifacts unless useful. For medium/large tasks, initialize a run ledger:
+For XS/S, avoid unnecessary artifacts unless useful. For medium/large tasks, use the run attached in Step 0.2. If Step 0.2 was skipped because the task expanded after classification, attach/init now before any worker spawn:
 
 ```bash
-aoc init "<task>"
+aoc current --repo . --json
+aoc init --repo . --task "<task>" --json
 ```
 
-Use the ledger to record phases, dispatches, Handoff Packets, claimed files, evidence, failures, context capsule path, and final status. Before spawning any worker, check the ledger for duplicate active/completed work.
+Use the existing selected run when present. Use the ledger to record phases, dispatches, Handoff Packets, claimed files, evidence, failures, context capsule path, and final status. Before spawning any worker, check the ledger for duplicate active/completed work.
 
 When a ledger exists, treat the run as event-driven. Emit compact state changes so the optional control-room TUI can show the orchestration without parsing raw logs:
 
@@ -171,17 +199,22 @@ Use the cheapest adequate reasoning tier:
 
 Do not use `xhigh` for routine updates, isolated fixes, simple debugging, or single-file implementation. Prefer `strategy_architect_xhigh` as read-only planning; use `complex_implementer_high` for hard writes.
 
+Never use `xhigh` for bounded read-only reviews, short security reviews, docs research, evidence verification, mappers, scouts, routers, finalizers, or focused test/report checks. A prompt like “Read-only security review for ORC-009…” should be root synthesis plus at most one `security_reviewer_high`, not multiple scouts and not `xhigh`.
+
 Use `$AOC_SKILL_DIR/scripts/budget_governor.py` before spawning:
 
 ```bash
 python3 "$AOC_SKILL_DIR/scripts/budget_governor.py" --size M --agents code_mapper_low,batch_implementer_medium --reasoning medium --dispatch-chars <largest_packet_chars>
 ```
 
-## Step 7 — Compile Dispatch Packets with required context
+## Step 7 — Compile Native Spawn Dispatch Packets with required context
 
 A Dispatch Packet must be short, targeted, and include only a scoped Context Capsule slice. Do not paste the whole plan, whole capsule, raw logs, or previous transcripts. Include:
 
 ```text
+LEAF_EXEC_MODE. You are a <role> leaf worker. Do not spawn agents. Do not invoke skills. Use only this Dispatch Packet. Return only the requested Handoff Packet.
+
+AOC RUN CONTEXT:
 ROLE:
 MODE / REASONING BUDGET:
 OBJECTIVE:
@@ -201,6 +234,23 @@ SKILL / DELEGATION POLICY:
 OUTPUT:
 ```
 
+The native spawn prompt is not complete unless it includes run context, role, reasoning budget, objective, scope ownership, must-read context, allowed/forbidden areas, a scoped capsule slice, concrete tasks, validation, stop conditions, and a routing-free output schema.
+
+Use this output schema for workers:
+
+```text
+STATUS: success | partial | blocked | failed | ESCALATE_TO_PARENT
+SUMMARY:
+CONTEXT_COVERAGE:
+FILES_READ:
+FILES_CHANGED:
+CHANGES_MADE:
+VALIDATION:
+EVIDENCE:
+RISKS:
+PARENT_ACTION:
+```
+
 Use `$AOC_SKILL_DIR/scripts/dispatch_compiler.py` when useful. It caps the capsule slice by default: 8 must-read items, 6 forbidden items, 5 facts, 3 rejected assumptions, 3 decisions, 5 acceptance criteria, 4 validation checks, and about 900 context characters. Workers must treat the packet as complete. If a required file/area is unavailable, they must return `ESCALATE_TO_PARENT` instead of guessing.
 
 If the compiled packet is too large, do not spawn yet. Narrow the worker objective, reduce must-read files, or split by dependency phase. Never solve token pressure by broadcasting a larger packet.
@@ -216,6 +266,8 @@ Before spawning implementers, group work by ownership:
 - Independent read-only audits → parallel agents are okay.
 - Independent write-heavy modules → separate workers only if file ownership does not overlap.
 - Do not spawn a scout if the implementer must read the same files anyway; put those files in `MUST READ`.
+- Do not spawn docs/research workers for ordinary implementation just because docs were checked; root should do bounded Context7/docs lookup before dispatch.
+- Treat “go deep” as a request for stronger context coverage, validation, and review, not extra scouts.
 
 Use `$AOC_SKILL_DIR/scripts/batch_tasks.py` when useful.
 
@@ -237,7 +289,7 @@ python3 "$AOC_SKILL_DIR/scripts/context_coverage_gate.py" --dispatch <dispatch-f
 
 Use `--capsule --full-capsule` only when a single worker was explicitly assigned every must-read item in the capsule.
 
-Workers must not return `next_handoff`, `target_agent`, or child-agent plans unless explicitly requested by the user.
+Workers must not return `next_handoff`, `target_agent`, or child-agent plans. The root orchestrator owns all routing decisions.
 
 ## Step 10 — Failure recovery
 

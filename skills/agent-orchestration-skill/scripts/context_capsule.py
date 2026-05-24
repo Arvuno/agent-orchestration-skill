@@ -213,6 +213,8 @@ def cmd_init(args: argparse.Namespace) -> None:
         ("blockers", "blocker"), ("evidence_refs", "evidence"),
     ]:
         add_many(capsule, section, getattr(args, attr))
+    if args.require_must_read and not capsule["must_read"]:
+        raise SystemExit("Context Capsule requires at least one --must-read entry when --require-must-read is set.")
     out = Path(args.out)
     save(out, capsule)
     maybe_emit(out, "context_capsule_created", capsule.get("run_id"), f"Context Capsule created for {args.task}", {"must_read": len(capsule["must_read"]), "capsule": str(out)})
@@ -317,6 +319,7 @@ def main() -> None:
     p.add_argument("--run-id", default="")
     p.add_argument("--task-id", default="")
     p.add_argument("--out", default=".orchestration/context_capsule.json")
+    p.add_argument("--require-must-read", action="store_true", help="Fail if no --must-read entries are provided")
     add_common_init_args(p)
     p.set_defaults(func=cmd_init)
 

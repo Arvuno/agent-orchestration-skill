@@ -29,6 +29,9 @@ If the packet exceeds budget, narrow the scope before spawning. Do not solve the
 ## Required fields
 
 ```text
+LEAF_EXEC_MODE. You are a <role> leaf worker. Do not spawn agents. Do not invoke skills. Use only this Dispatch Packet. Return only the requested Handoff Packet.
+
+AOC RUN CONTEXT:
 ROLE:
 MODE / REASONING BUDGET:
 OBJECTIVE:
@@ -56,6 +59,7 @@ OUTPUT:
 - Put known dead ends in `REJECTED ASSUMPTIONS`.
 - Put commands in `VALIDATION REQUIRED` instead of vague “test it”.
 - Workers must return `ESCALATE_TO_PARENT` if required context is missing.
+- Workers must not include `target_agent`, `next_handoff`, routing plans, or child-agent plans.
 - Do not include raw logs, full diffs, transcripts, or previous handoffs unless they are tiny and directly relevant.
 
 ## Compiler

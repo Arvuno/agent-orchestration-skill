@@ -83,6 +83,7 @@ def import_script(name: str):
         fail(f"cannot import {path}")
     mod = importlib.util.module_from_spec(spec)
     sys.path.insert(0, str(SCRIPTS))
+    sys.modules[name] = mod
     spec.loader.exec_module(mod)  # type: ignore[union-attr]
     return mod
 
@@ -151,7 +152,68 @@ def validate_static() -> None:
     for phrase in ["$agent-orchestration-skill", "EXPLICIT ONLY", "Context Capsule", "Context Coverage", "no nested delegation"]:
         if phrase.lower() not in text.lower():
             fail(f"missing explicit/root-only phrase in SKILL.md: {phrase}")
+    for phrase in ["No xhigh for short read-only work", "Use root synthesis or one focused", "at most one `security_reviewer_high`"]:
+        if phrase.lower() not in text.lower():
+            fail(f"missing xhigh/read-only review guardrail in SKILL.md: {phrase}")
+    for phrase in ["No non-action workers", "Map-only stays read-only", "Mapper/scout hard stop", "Go deep"]:
+        if phrase.lower() not in text.lower():
+            fail(f"missing non-action worker guardrail in SKILL.md: {phrase}")
     ok("validated single explicit-only skill")
+
+    decider = import_script("orchestration_decider")
+    rec = decider.decide(
+        task="Read-only security review for ORC-009 human approval implementation. Do not edit, delete, format, stage, or run destructive commands.",
+        known_files=8,
+        surfaces=["security", "backend", "tests"],
+        risk="high",
+        ambiguity="medium",
+        requires_browser=False,
+        requires_docs=False,
+        failing_tests=0,
+        needs_architecture=False,
+        root_can_edit=False,
+        force_delegate=True,
+    )
+    if rec.reasoning == "xhigh" or any("xhigh" in agent for agent in rec.default_agents):
+        fail(f"read-only security review should not use xhigh: {rec}")
+    if len(rec.default_agents) > 1 or rec.default_agents != ["security_reviewer_high"]:
+        fail(f"read-only security review should use exactly one focused high reviewer: {rec}")
+    memory_rec = decider.decide(
+        task="Use agent-orchestration-skill and proceed to improve the memory system! go deep",
+        known_files=0,
+        surfaces=["backend", "data", "tests"],
+        risk="medium",
+        ambiguity="high",
+        requires_browser=False,
+        requires_docs=True,
+        failing_tests=0,
+        needs_architecture=False,
+        root_can_edit=False,
+        force_delegate=True,
+    )
+    if any(agent in memory_rec.default_agents for agent in ["code_mapper_low", "docs_researcher_low"]):
+        fail(f"cohesive implementation should not spawn non-action mapper/docs workers: {memory_rec}")
+    if "batch_implementer_medium" not in memory_rec.default_agents and "complex_implementer_high" not in memory_rec.default_agents:
+        fail(f"cohesive implementation should dispatch an implementer with context coverage: {memory_rec}")
+    map_only_rec = decider.decide(
+        task="Map memory subsystem architecture and identify owners only",
+        known_files=0,
+        surfaces=["backend", "data", "tests"],
+        risk="medium",
+        ambiguity="high",
+        requires_browser=False,
+        requires_docs=False,
+        failing_tests=0,
+        needs_architecture=False,
+        root_can_edit=False,
+        force_delegate=True,
+    )
+    if map_only_rec.default_agents != ["code_mapper_low"] or map_only_rec.reasoning == "xhigh":
+        fail(f"map-only task should use one low mapper and no xhigh/implementer: {map_only_rec}")
+    budget = import_script("budget_governor")
+    over = budget.estimate(["security_reviewer_xhigh"], "xhigh", "L", False, False, 1200)
+    if over["status"] != "OVER_BUDGET" or not any("xhigh is not allowed" in f for f in over["hard_failures"]):
+        fail(f"budget governor should reject xhigh reviewer workers: {over}")
 
     required_execs = [
         ROOT / "bin" / "aoc.mjs",
@@ -323,6 +385,12 @@ def validate_orchestration_flow() -> None:
         packet = dispatch_compiler.packet(data)
         if len(packet) >= 7000:
             fail("dispatch packet exceeded hard token/char budget")
+        for phrase in ["LEAF_EXEC_MODE", "AOC RUN CONTEXT:", "Do not spawn agents", "Do not invoke skills"]:
+            if phrase not in packet:
+                fail(f"native spawn dispatch packet missing required launch policy: {phrase}")
+        for forbidden in ["next_handoff:", "target_agent:"]:
+            if forbidden in packet:
+                fail(f"dispatch packet leaked forbidden routing text: {forbidden}")
         dispatch_path = repo / f".orchestration/runs/{run_id}/dispatches/P2.md"
         dispatch_path.parent.mkdir(parents=True, exist_ok=True)
         dispatch_path.write_text(packet, encoding="utf-8")

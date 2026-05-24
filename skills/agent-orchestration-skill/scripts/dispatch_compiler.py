@@ -286,6 +286,9 @@ def cap_data(data: dict[str, Any], limits: dict[str, int], max_context_chars: in
 def packet(data: dict[str, Any], limits: dict[str, int] | None = None, max_context_chars: int = DEFAULT_CONTEXT_CHARS, max_packet_chars: int = DEFAULT_PACKET_CHARS) -> str:
     limits = limits or DEFAULT_LIMITS
     data = cap_data(data, limits, max_context_chars)
+    run_id = data.get("run_id", "")
+    phase_id = data.get("phase_id", "")
+    agent = data.get("agent", "")
     role = data.get("role", "worker")
     reasoning = data.get("reasoning", "medium")
     objective = data.get("objective", "Complete the assigned scoped task.")
@@ -301,11 +304,21 @@ def packet(data: dict[str, Any], limits: dict[str, int] | None = None, max_conte
     acceptance = split_items(data.get("acceptance"))
     validation = split_items(data.get("validation"))
     stop = data.get("stop", "Stop if required context is missing, ownership overlaps another active writer, validation exposes unrelated failures, or the task would require broader scope than assigned.")
-    output = data.get("output", "Return a concise Handoff Packet only: STATUS, SUMMARY, CONTEXT_COVERAGE, FILES_READ, FILES_CHANGED, CHANGES, VALIDATION, EVIDENCE, RISKS, PARENT_ACTION.")
+    default_output = "Return a concise Handoff Packet only: STATUS, SUMMARY, CONTEXT_COVERAGE, FILES_READ, FILES_CHANGED, CHANGES_MADE, VALIDATION, EVIDENCE, RISKS, PARENT_ACTION."
+    output = data.get("output", default_output)
+    if any(term in str(output).lower() for term in ["next_handoff", "target_agent", "child-agent", "child agent"]):
+        output = default_output
 
     coverage = "Read every MUST READ item before editing. Report required_files_read, missing_context, and safe_to_modify. If anything required is unavailable, return ESCALATE_TO_PARENT instead of guessing."
 
-    text = f"""ROLE:
+    text = f"""LEAF_EXEC_MODE. You are a {role} leaf worker. Do not spawn agents. Do not invoke skills. Use only this Dispatch Packet. Return only the requested Handoff Packet.
+
+AOC RUN CONTEXT:
+- run_id: {run_id or "unknown"}
+- phase_id: {phase_id or "unassigned"}
+- agent: {agent or role}
+
+ROLE:
 {role}
 
 MODE / REASONING BUDGET:
@@ -354,10 +367,11 @@ STOP CONDITIONS:
 {stop}
 
 SKILL / DELEGATION POLICY:
-Do not invoke repo skills. Do not invoke $agent-orchestration-skill. Do not spawn, request, recommend, or plan child subagents. Treat this Dispatch Packet as complete unless required context is missing.
+Do not invoke repo skills. Do not invoke $agent-orchestration-skill. Do not spawn, request, recommend, coordinate, or plan child subagents. Treat this Dispatch Packet as complete unless required context is missing. If more help is needed, return ESCALATE_TO_PARENT.
 
 OUTPUT:
 {output}
+Do not include routing fields, routing plans, or child-agent plans. The root orchestrator owns routing.
 """
     return text
 
@@ -401,6 +415,12 @@ def main() -> None:
         v = getattr(args, f)
         if v is not None:
             data[f] = v
+    if args.run_id and not data.get("run_id"):
+        data["run_id"] = args.run_id
+    if args.phase_id and not data.get("phase_id"):
+        data["phase_id"] = args.phase_id
+    if args.agent and not data.get("agent"):
+        data["agent"] = args.agent
     data = merge_capsule(data, args.capsule, limits=limits, max_context_chars=args.max_context_chars)
     strict_required = args.strict or (not args.no_strict and requires_strict_context(data))
     if strict_required and not split_items(data.get("must_read")):

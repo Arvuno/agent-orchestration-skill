@@ -11,6 +11,20 @@ AMB_ORDER = {"low": 0, "medium": 1, "high": 2}
 HIGH_RISK_SURFACES = {"auth", "payment", "payments", "security", "database", "data", "migration", "concurrency", "production"}
 UI_SURFACES = {"frontend", "ui", "browser"}
 DOC_SURFACES = {"docs", "research", "dependency"}
+IMPLEMENTATION_TERMS = {
+    "fix", "improve", "implement", "patch", "change", "update", "proceed",
+    "build", "add", "harden", "cleanup", "clean up", "go deep",
+}
+SCOUT_TERMS = {
+    "map", "mapper", "scout", "research", "investigate", "audit", "survey",
+    "inventory", "discover", "explore", "triage",
+}
+COHESIVE_SURFACE_GROUPS = [
+    {"backend", "data", "database", "tests"},
+    {"frontend", "ui", "browser", "tests"},
+    {"infra", "devops", "docker", "ci", "tests"},
+    {"docs", "research"},
+]
 
 
 @dataclass
@@ -41,6 +55,35 @@ def dedupe_cap(agents: list[str], cap: int) -> list[str]:
     return out[:cap]
 
 
+def has_any(task_l: str, terms: set[str]) -> bool:
+    return any(term in task_l for term in terms)
+
+
+def cohesive_surfaces(sset: set[str]) -> bool:
+    meaningful = {s for s in sset if s}
+    if not meaningful:
+        return True
+    for group in COHESIVE_SURFACE_GROUPS:
+        if meaningful <= group:
+            return True
+    return False
+
+
+def should_spawn_mapper(task_l: str, known_files: int, sset: set[str], amb_i: int, needs_architecture: bool, requires_docs: bool) -> bool:
+    """Return true only when a mapper has distinct value over implementer coverage."""
+    implementation_intent = has_any(task_l, IMPLEMENTATION_TERMS)
+    explicit_scout = has_any(task_l, SCOUT_TERMS) and not implementation_intent
+    if needs_architecture:
+        return True
+    if explicit_scout:
+        return True
+    if implementation_intent and cohesive_surfaces(sset):
+        return False
+    if known_files == 0 and amb_i >= 2 and not cohesive_surfaces(sset) and not requires_docs:
+        return True
+    return False
+
+
 def decide(
     task: str,
     known_files: int,
@@ -59,14 +102,45 @@ def decide(
     amb_i = AMB_ORDER[ambiguity]
     high_risk_surface = bool(sset & HIGH_RISK_SURFACES)
     task_l = task.lower()
+    read_only_terms = [
+        "read-only", "readonly", "do not edit", "do not modify", "do not delete",
+        "do not format", "do not stage", "no edits", "no write", "no writes",
+    ]
+    review_terms = ["review", "audit", "security review", "regression review"]
+    read_only_review = any(t in task_l for t in read_only_terms) and any(t in task_l for t in review_terms)
     architecture_terms = ["architecture", "architect", "design", "structure", "structuring", "major feature", "new feature", "system design", "redesign", "refactor architecture"]
     if not needs_architecture and any(term in task_l for term in architecture_terms) and (amb_i >= 1 or risk_i >= 1 or len(sset) >= 2 or known_files == 0):
         needs_architecture = True
     requires_browser = requires_browser or bool(sset & UI_SURFACES)
     requires_docs = requires_docs or bool(sset & DOC_SURFACES)
+    implementation_intent = has_any(task_l, IMPLEMENTATION_TERMS)
+    explicit_research = has_any(task_l, SCOUT_TERMS) and not implementation_intent
+    mapper_needed = should_spawn_mapper(task_l, known_files, sset, amb_i, needs_architecture, requires_docs)
     notes: list[str] = []
 
-    if known_files <= 1 and risk_i == 0 and amb_i == 0 and failing_tests <= 1 and not needs_architecture and not requires_browser and not requires_docs:
+    if read_only_review:
+        size = "S" if known_files <= 8 and risk_i <= 2 else "M"
+        max_agents = 1
+        agents = ["security_reviewer_high"] if ("security" in task_l or "security" in sset or risk_i >= 2) else ["regression_reviewer_medium"]
+        reasoning = "high" if agents[0] == "security_reviewer_high" else "medium"
+        verification = "targeted"
+        spawn_policy = "single_read_only_reviewer"
+        needs_architecture = False
+        requires_docs = False
+        notes.append("Read-only reviews must use root synthesis or one focused reviewer; do not spawn scouts for the same review packet.")
+        notes.append("xhigh is forbidden for short read-only reviews, security reviews, evidence checks, and docs lookups.")
+        notes.append("Run only focused checks that are already relevant to the review; avoid broad exploratory fan-out.")
+    elif explicit_research:
+        size = "S" if known_files <= 8 and risk_i <= 1 else "M"
+        max_agents = 1
+        agents = ["docs_researcher_low"] if sset <= DOC_SURFACES or "docs" in task_l else ["code_mapper_low"]
+        reasoning = "low" if agents[0].endswith("_low") else "medium"
+        verification = "read-only"
+        spawn_policy = "single_read_only_mapper"
+        needs_architecture = False
+        notes.append("Explicit mapping/research without implementation intent gets one read-only worker only.")
+        notes.append("Do not add implementers, reviewers, routers, or xhigh unless the user asks to proceed after the map.")
+    elif known_files <= 1 and risk_i == 0 and amb_i == 0 and failing_tests <= 1 and not needs_architecture and not requires_browser and not requires_docs:
         size = "XS"
         max_agents = 1 if (force_delegate or not root_can_edit) else 0
         agents = ["micro_implementer_medium"] if max_agents else []
@@ -92,9 +166,9 @@ def decide(
         size = "M"
         max_agents = 3
         agents: list[str] = []
-        if amb_i >= 1 or known_files == 0:
+        if mapper_needed:
             agents.append("code_mapper_low")
-        if requires_docs and amb_i >= 1:
+        if requires_docs and amb_i >= 1 and explicit_research:
             agents.append("docs_researcher_low")
         agents.append("batch_implementer_medium")
         if failing_tests > 1 or risk_i >= 1 or requires_browser:
@@ -108,9 +182,9 @@ def decide(
         size = "L"
         max_agents = 4
         agents = []
-        if amb_i >= 1 or known_files == 0:
+        if mapper_needed:
             agents.append("code_mapper_low")
-        if requires_docs:
+        if requires_docs and explicit_research:
             agents.append("docs_researcher_low")
         agents.append("complex_implementer_high" if high_risk_surface or amb_i == 2 else "batch_implementer_medium")
         agents.append("verification_engine_medium")
@@ -129,7 +203,7 @@ def decide(
             agents.append("strategy_architect_xhigh")
         else:
             agents.append("code_mapper_low")
-        if requires_docs:
+        if requires_docs and explicit_research:
             agents.append("docs_researcher_low")
         agents.append("complex_implementer_high")
         agents.append("verification_engine_medium")
@@ -146,11 +220,17 @@ def decide(
     router_required = len(agents) > 2
     if size in {"M", "L", "XL"}:
         notes.append("Use Context Capsule as persistent storage, but dispatch only a scoped slice to each worker.")
+    if not mapper_needed and any(a in agents for a in ["batch_implementer_medium", "complex_implementer_high"]):
+        notes.append("Skip separate mapper/scout: implementer must perform context coverage, inspect, patch, and validate in one loop.")
+    if requires_docs and implementation_intent:
+        notes.append("Perform required docs lookup in the root before dispatch; do not spawn a docs researcher for normal implementation.")
     if router_required:
         notes.append("Use communication_router_low only after multiple handoffs or conflicts; never pre-route a single worker result.")
     if "strategy_architect_xhigh" in agents:
         notes.append("xhigh is read-only planning/architecture; implementation should be high/medium after the plan is clear.")
-    if len(agents) == 1:
+    if len(agents) == 1 and verification == "read-only":
+        notes.append("Single read-only worker must complete: context coverage -> inspect -> evidence-backed handoff.")
+    elif len(agents) == 1:
         notes.append("Single worker must complete: context coverage -> inspect -> patch/verify -> handoff.")
 
     return Recommendation(size, max_agents, agents, reasoning, context_capsule_required, router_required, requires_browser, verification, spawn_policy, notes)
