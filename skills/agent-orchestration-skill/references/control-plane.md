@@ -21,6 +21,7 @@ Use a small persistent control plane for non-trivial runs. The goal is not to cr
 
 - Create a run ledger only for root orchestration mode, not for leaf verification jobs.
 - Use the ledger before spawning to check whether an equivalent phase is already active or complete.
+- Run classification and budget gates before the first native worker spawn; do not spawn a scout and justify it afterward.
 - Record agent name, phase, claimed files, commands, status, blocker, and evidence path.
 - Do not broadcast the ledger to every worker. Workers receive short Dispatch Packets.
 - Write notepad entries only for durable facts that will help future tasks. Do not store transcript summaries or noisy logs.

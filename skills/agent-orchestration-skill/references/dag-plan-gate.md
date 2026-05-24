@@ -15,6 +15,7 @@ A plan is executable when:
 
 - referenced files/modules exist or the phase explicitly says discovery is required;
 - every phase can start from its Dispatch Packet;
+- every worker phase uses a stable bundled or custom native Codex worker ID;
 - acceptance criteria are observable;
 - dependencies are valid and non-circular;
 - verification exists for behavioral changes;

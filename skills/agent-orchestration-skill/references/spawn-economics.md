@@ -18,6 +18,8 @@ Before spawning, the root asks:
 
 If the answer is no, do not spawn.
 
+Before any native worker spawn, run the decider and budget governor. The worker must be present in the decider recommendation, or the root must map the recommended role to a declared custom native Codex worker ID with `--agent-aliases`. The budget must pass for the exact worker ID that will be spawned. The bundled `subagents/*.toml` profiles are defaults, not a required registry.
+
 ## Default caps
 
 - XS: usually 0 workers, max 1 if root edits are forbidden.
@@ -34,6 +36,7 @@ If the answer is no, do not spawn.
 - It owns a complete implementation bundle.
 - It provides independent verification or browser evidence.
 - A mapper/scout will inspect a genuinely different surface or reduce unknown ownership across broad independent domains before implementation.
+- The decider recommended that worker and `budget_governor.py` returned `OKAY`.
 
 ## Do not spawn when
 
@@ -48,3 +51,4 @@ If the answer is no, do not spawn.
 - File ownership overlaps with another active write agent.
 - The only purpose is to satisfy a multiagent habit.
 - The Dispatch Packet has become large because the scope is unclear.
+- The worker was not produced by `orchestration_decider.py`, was not a declared custom worker for that role, or was budgeted with an ad hoc nickname invented for the run.

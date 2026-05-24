@@ -155,7 +155,7 @@ def validate_static() -> None:
     for phrase in ["No xhigh for short read-only work", "Use root synthesis or one focused", "at most one `security_reviewer_high`"]:
         if phrase.lower() not in text.lower():
             fail(f"missing xhigh/read-only review guardrail in SKILL.md: {phrase}")
-    for phrase in ["No non-action workers", "Map-only stays read-only", "Mapper/scout hard stop", "Go deep"]:
+    for phrase in ["No non-action workers", "Map-only stays read-only", "No spawn before gates", "Declared worker identities", "Mapper/scout hard stop", "Go deep"]:
         if phrase.lower() not in text.lower():
             fail(f"missing non-action worker guardrail in SKILL.md: {phrase}")
     ok("validated single explicit-only skill")
@@ -214,6 +214,50 @@ def validate_static() -> None:
     over = budget.estimate(["security_reviewer_xhigh"], "xhigh", "L", False, False, 1200)
     if over["status"] != "OVER_BUDGET" or not any("xhigh is not allowed" in f for f in over["hard_failures"]):
         fail(f"budget governor should reject xhigh reviewer workers: {over}")
+    custom = budget.estimate(["memory_ownership_scout", "backend_implementer", "verification_reviewer"], "high", "L", False, False, 4500)
+    if any("Unknown" in f for f in custom["hard_failures"]):
+        fail(f"budget governor should allow user-defined native agents unless an allowlist is supplied: {custom}")
+    custom_locked = budget.estimate(
+        ["memory_ownership_scout", "backend_implementer", "verification_reviewer"],
+        "high",
+        "L",
+        False,
+        False,
+        4500,
+        allowed_agents={"batch_implementer_medium", "verification_engine_medium"},
+    )
+    if custom_locked["status"] != "OVER_BUDGET" or not any("Unknown agent names for configured registry" in f for f in custom_locked["hard_failures"]):
+        fail(f"budget governor should reject names outside a configured user registry: {custom_locked}")
+    custom_mapped = budget.estimate(
+        ["backend_implementer", "verification_reviewer"],
+        "medium",
+        "M",
+        False,
+        False,
+        3500,
+        recommended_agents={"batch_implementer_medium", "verification_engine_medium"},
+        agent_aliases={
+            "batch_implementer_medium": "backend_implementer",
+            "verification_engine_medium": "verification_reviewer",
+        },
+    )
+    if custom_mapped["status"] != "OKAY":
+        fail(f"budget governor should allow custom agents mapped from decider roles: {custom_mapped}")
+    custom_unmapped_scout = budget.estimate(
+        ["memory_ownership_scout", "backend_implementer", "verification_reviewer"],
+        "medium",
+        "L",
+        False,
+        False,
+        3500,
+        recommended_agents={"batch_implementer_medium", "verification_engine_medium"},
+        agent_aliases={
+            "batch_implementer_medium": "backend_implementer",
+            "verification_engine_medium": "verification_reviewer",
+        },
+    )
+    if custom_unmapped_scout["status"] != "OVER_BUDGET" or not any("not recommended by decider" in f for f in custom_unmapped_scout["hard_failures"]):
+        fail(f"budget governor should reject unmapped custom scout before spawn: {custom_unmapped_scout}")
 
     required_execs = [
         ROOT / "bin" / "aoc.mjs",

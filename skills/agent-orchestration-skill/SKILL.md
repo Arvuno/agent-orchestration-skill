@@ -91,6 +91,8 @@ AOC_SKILL_DIR="${AOC_SKILL_DIR:-${CODEX_HOME:-$HOME/.codex}/skills/agent-orchest
 17. **No xhigh for short read-only work:** read-only reviews, security reviews with a bounded focus, docs lookups, evidence checks, scouts, mappers, routers, and finalizers must not use `xhigh`. Use root synthesis or one focused `medium`/`high` reviewer.
 18. **No non-action workers:** do not spawn a mapper/scout/docs researcher that only reads the same files the implementer must read. For cohesive implementation tasks, dispatch one implementer with context coverage instead. “Go deep” means stricter coverage and verification, not more agents.
 19. **Map-only stays read-only:** if the user asks only to map, research, audit, inventory, or discover, spawn at most one read-only worker and do not add implementers/reviewers unless the user asks to proceed.
+20. **No spawn before gates:** before the first native worker spawn, the root must run `orchestration_decider.py` and `budget_governor.py` using the intended worker IDs. Do not spawn a scout first and justify it afterward.
+21. **Declared worker identities:** budget and dispatch must use stable native Codex worker IDs from the active environment. The package profiles in `subagents/*.toml` are defaults, not a required registry. If the user has custom agents, map decider roles to those IDs with `--agent-aliases` and optionally pass an allowlist with `--allowed-agents` or `--agent-registry`; do not invent one-off nicknames during the run.
 
 ## Step 1 — Classify before spawning
 
@@ -104,7 +106,20 @@ Classify the task using:
 - Parallel value: low, medium, high
 - Worktree state: clean, dirty, unknown
 
-Use `$AOC_SKILL_DIR/scripts/orchestration_decider.py` when useful.
+Run `$AOC_SKILL_DIR/scripts/orchestration_decider.py` before any worker spawn. This is mandatory for every non-trivial task and for every proposed scout/research/review worker.
+
+```bash
+python3 "$AOC_SKILL_DIR/scripts/orchestration_decider.py" \
+  --task "<task>" \
+  --known-files <n> \
+  --surfaces backend,tests \
+  --risk medium \
+  --ambiguity high \
+  --requires-docs true \
+  --root-can-edit false \
+  --force-delegate true \
+  --json
+```
 
 ## Step 2 — Pick the minimum viable orchestration mode
 
@@ -119,6 +134,8 @@ Use `$AOC_SKILL_DIR/scripts/orchestration_decider.py` when useful.
 Do not spawn agents just to satisfy a habit. Spawn only when the worker has a meaningful bundle of work or isolates noisy verification/browser output. A useful worker must perform at least two valuable actions, such as inspect + patch, patch + validate, browser reproduce + evidence, or mapping + ownership summary.
 
 Mapper/scout hard stop: do not spawn a read-only mapper if the implementer must read the same files anyway. A mapper is allowed only when it inspects a substantially different surface, reduces unknown ownership across broad independent domains, or the root cannot compile a safe implementation Dispatch Packet without it. Otherwise one implementer owns context coverage, inspection, patching, focused validation, and handoff.
+
+First-scout exception: if ownership is genuinely unknown and the root cannot produce a safe implementation packet, the scout is allowed only after the decider recommends `code_mapper_low` or `scope_scout_low` and budget passes. The scout packet must be narrow, read-only, use `low` reasoning by default, cap must-read areas, and stop after recommending one bounded implementation bundle. Do not run a pre-gate scout.
 
 ## Step 3 — Preserve context before dispatch
 
@@ -201,11 +218,14 @@ Do not use `xhigh` for routine updates, isolated fixes, simple debugging, or sin
 
 Never use `xhigh` for bounded read-only reviews, short security reviews, docs research, evidence verification, mappers, scouts, routers, finalizers, or focused test/report checks. A prompt like “Read-only security review for ORC-009…” should be root synthesis plus at most one `security_reviewer_high`, not multiple scouts and not `xhigh`.
 
-Use `$AOC_SKILL_DIR/scripts/budget_governor.py` before spawning:
+Use `$AOC_SKILL_DIR/scripts/budget_governor.py` before spawning. Use the worker IDs that will actually be spawned. The bundled `subagents/*.toml` names are examples; custom user agents are valid. To enforce a configured registry, pass `--agent-registry <path>` or `--allowed-agents <csv>`. To keep decider gating with custom agents, pass the decider roles through `--recommended-agents` and map them with `--agent-aliases role=custom_worker`:
 
 ```bash
 python3 "$AOC_SKILL_DIR/scripts/budget_governor.py" --size M --agents code_mapper_low,batch_implementer_medium --reasoning medium --dispatch-chars <largest_packet_chars>
+python3 "$AOC_SKILL_DIR/scripts/budget_governor.py" --size M --recommended-agents batch_implementer_medium,verification_engine_medium --agents my_backend_worker,my_verifier --agent-aliases batch_implementer_medium=my_backend_worker,verification_engine_medium=my_verifier --reasoning medium --dispatch-chars <largest_packet_chars>
 ```
+
+If `budget_governor.py` returns `OVER_BUDGET`, do not spawn. Reclassify, merge workers, reduce reasoning, or narrow the Dispatch Packet.
 
 ## Step 7 — Compile Native Spawn Dispatch Packets with required context
 
@@ -268,6 +288,7 @@ Before spawning implementers, group work by ownership:
 - Do not spawn a scout if the implementer must read the same files anyway; put those files in `MUST READ`.
 - Do not spawn docs/research workers for ordinary implementation just because docs were checked; root should do bounded Context7/docs lookup before dispatch.
 - Treat “go deep” as a request for stronger context coverage, validation, and review, not extra scouts.
+- Before any spawn, confirm the worker appears in the decider recommendation or the root has mapped the decider role to a declared custom worker ID, and the budget passed for the exact worker ID that will be spawned.
 
 Use `$AOC_SKILL_DIR/scripts/batch_tasks.py` when useful.
 
