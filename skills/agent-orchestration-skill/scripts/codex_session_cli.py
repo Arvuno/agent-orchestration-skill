@@ -39,6 +39,50 @@ LEGACY_CODEX_IMPORT_SOURCE = "codex_session"
 CODEX_IMPORT_SOURCES = {CODEX_IMPORT_SOURCE, LEGACY_CODEX_IMPORT_SOURCE}
 
 
+def safe_path_exists(path: Path) -> bool:
+    try:
+        return path.exists()
+    except OSError:
+        return False
+
+
+def safe_path_access(path: Path, mode: int) -> bool:
+    try:
+        return os.access(path, mode)
+    except OSError:
+        return False
+
+
+def safe_path_stat(path: Path) -> os.stat_result | None:
+    try:
+        return path.stat()
+    except OSError:
+        return None
+
+
+def safe_path_mtime(path: Path) -> float:
+    stat = safe_path_stat(path)
+    return stat.st_mtime if stat else 0.0
+
+
+def safe_path_is_file(path: Path) -> bool:
+    try:
+        return path.is_file()
+    except OSError:
+        return False
+
+
+def safe_path_resolve(path: Path) -> Path | None:
+    try:
+        return path.expanduser().resolve()
+    except OSError:
+        return None
+
+
+def safe_readable_dir(path: Path) -> bool:
+    return safe_path_exists(path) and safe_path_access(path, os.R_OK | os.X_OK)
+
+
 def safe_slug(value: Any, fallback: str = "id", max_len: int = 96) -> str:
     text = re.sub(r"[^A-Za-z0-9._-]+", "-", str(value or "").strip()).strip("._-")
     text = text.replace("..", "-")
@@ -62,14 +106,16 @@ def short_text(value: Any, limit: int = MAX_TEXT) -> str:
 def codex_homes(arg: str | None = None) -> list[Path]:
     candidates = [arg, os.environ.get("AOC_CODEX_HOME"), os.environ.get("CODEX_HOME"), "~/.codex"]
     root_fallback = Path("/root/.codex")
-    if root_fallback.exists() and os.access(root_fallback, os.R_OK):
+    if safe_readable_dir(root_fallback):
         candidates.append(str(root_fallback))
     homes: list[Path] = []
     seen: set[str] = set()
     for raw in candidates:
         if not raw:
             continue
-        path = Path(raw).expanduser().resolve()
+        path = safe_path_resolve(Path(raw))
+        if path is None:
+            continue
         key = str(path)
         if key not in seen:
             seen.add(key)
@@ -79,7 +125,7 @@ def codex_homes(arg: str | None = None) -> list[Path]:
 
 def codex_home(arg: str | None = None) -> Path:
     homes = codex_homes(arg)
-    return homes[0] if homes else Path("~/.codex").expanduser().resolve()
+    return homes[0] if homes else (safe_path_resolve(Path("~/.codex")) or Path("~/.codex").expanduser())
 
 
 def current_path(root: Path) -> Path:
@@ -125,17 +171,17 @@ def iter_session_files(home: Path | Iterable[Path]) -> list[Path]:
     files_by_path: dict[str, Path] = {}
     for one_home in homes:
         base = one_home / "sessions"
-        if not base.exists():
+        if not safe_path_exists(base):
             continue
         try:
-            found = base.glob("[0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/rollout-*.jsonl")
-            for path in found:
-                if path.is_file():
-                    files_by_path[str(path.resolve())] = path
+            for path in base.glob("[0-9][0-9][0-9][0-9]/[0-9][0-9]/[0-9][0-9]/rollout-*.jsonl"):
+                if safe_path_is_file(path):
+                    resolved = safe_path_resolve(path)
+                    files_by_path[str(resolved or path)] = path
         except OSError:
             continue
     files = list(files_by_path.values())
-    files.sort(key=lambda p: (p.stat().st_mtime, str(p)))
+    files.sort(key=lambda p: (safe_path_mtime(p), str(p)))
     return files
 
 
@@ -181,7 +227,7 @@ def first_meta(path: Path) -> dict[str, Any]:
                         return {k: v for k, v in item.items() if k != "_line"}
                     payload = item.get("payload")
                     return payload if isinstance(payload, dict) else {}
-    except FileNotFoundError:
+    except OSError:
         return {}
     return {}
 
@@ -347,6 +393,7 @@ def summarize_session(path: Path, rows: list[dict[str, Any]], errors: int, meta:
     event_counts: dict[str, int] = {}
     for row in normalized:
         event_counts[row["event"]] = event_counts.get(row["event"], 0) + 1
+    source_stat = safe_path_stat(path)
     return {
         "normalized": normalized,
         "summary": {
@@ -368,8 +415,8 @@ def summarize_session(path: Path, rows: list[dict[str, Any]], errors: int, meta:
             "last_ts": last_ts,
             "task": task,
             "imported_at": utc_now(),
-            "source_mtime": path.stat().st_mtime if path.exists() else None,
-            "source_size": path.stat().st_size if path.exists() else None,
+            "source_mtime": source_stat.st_mtime if source_stat else None,
+            "source_size": source_stat.st_size if source_stat else None,
         },
     }
 
@@ -393,7 +440,9 @@ def discover_rows(root: Path, home: Path | Iterable[Path]) -> list[dict[str, Any
     for path in iter_session_files(home):
         meta = first_meta(path)
         run_id = import_run_id_for_session(root, path, meta)
-        stat = path.stat()
+        stat = safe_path_stat(path)
+        if stat is None:
+            continue
         rows.append(
             {
                 "run_id": run_id,
@@ -527,8 +576,10 @@ def resolve_session_target(root: Path, home: Path | Iterable[Path], target: str 
     if target == "all":
         return files
     candidate = Path(target).expanduser()
-    if candidate.exists():
-        return [candidate.resolve()]
+    if safe_path_exists(candidate):
+        resolved = safe_path_resolve(candidate)
+        if resolved:
+            return [resolved]
     wanted = safe_slug(target, fallback="target")
     matches = []
     for path in files:
@@ -652,7 +703,9 @@ def cmd_watch(args: argparse.Namespace) -> None:
                 paths = paths[-args.limit :]
             changed = []
             for path in paths:
-                stat = path.stat()
+                stat = safe_path_stat(path)
+                if stat is None:
+                    continue
                 marker = (stat.st_mtime, stat.st_size)
                 key = str(path)
                 if last.get(key) == marker and not args.once:

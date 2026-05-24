@@ -334,6 +334,54 @@ if (!fakeHomeGui.stdout.includes('Home discovery checkout session') || !fakeHome
 }
 pass('pre-init TUI/GUI discover default HOME .codex sessions without AOC_CODEX_HOME');
 
+const rootFallbackProbe = `
+import os
+import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(0, ${JSON.stringify(scripts)})
+import codex_session_cli
+import aoc_tui
+
+original_exists = Path.exists
+original_access = os.access
+
+def assert_no_root_home(loader):
+    homes = [str(p) for p in loader()]
+    if "/root/.codex" in homes:
+        raise AssertionError(f"inaccessible root fallback leaked into discovery homes: {homes}")
+
+def exists_denied(self):
+    if str(self) == "/root/.codex":
+        raise PermissionError("stat denied")
+    return original_exists(self)
+
+def exists_true_for_root(self):
+    if str(self) == "/root/.codex":
+        return True
+    return original_exists(self)
+
+def access_denied(path, mode):
+    if str(path) == "/root/.codex":
+        raise PermissionError("access denied")
+    return original_access(path, mode)
+
+with tempfile.TemporaryDirectory() as home:
+    os.environ["HOME"] = home
+    os.environ.pop("AOC_CODEX_HOME", None)
+    os.environ.pop("CODEX_HOME", None)
+    with patch.object(Path, "exists", exists_denied):
+        assert_no_root_home(lambda: codex_session_cli.codex_homes(None))
+        assert_no_root_home(aoc_tui.codex_homes)
+    with patch.object(Path, "exists", exists_true_for_root), patch("os.access", access_denied):
+        assert_no_root_home(lambda: codex_session_cli.codex_homes(None))
+        assert_no_root_home(aoc_tui.codex_homes)
+`;
+run('python3', ['-c', rootFallbackProbe]);
+pass('Codex /root/.codex fallback is permission-safe');
+
 const fakeCodexHome = join(td, 'fake-codex-home');
 const rolloutDir = join(fakeCodexHome, 'sessions', '2026', '05', '24');
 mkdirSync(rolloutDir, { recursive: true });

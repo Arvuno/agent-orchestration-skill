@@ -23,7 +23,15 @@ from event_emit import latest_run_id, read_json, rebuild_index, run_dir, state_p
 from orchestration_stats import run_stats  # noqa: E402
 from usage_ledger import aggregate as usage_aggregate, derive_from_run, load_records  # noqa: E402
 from codex_appserver_bridge import snapshot as codex_snapshot  # noqa: E402
-from codex_session_cli import import_run_id_for_session, run_id_for_session  # noqa: E402
+from codex_session_cli import (  # noqa: E402
+    import_run_id_for_session,
+    run_id_for_session,
+    safe_path_access,
+    safe_path_exists,
+    safe_path_is_file,
+    safe_path_mtime,
+    safe_path_resolve,
+)
 
 TABS = ["Sessions", "Overview", "DAG", "Workers", "Events", "Verification", "Memory", "Usage", "Codex", "Gates", "Stats"]
 CODEX_DISCOVERY_LIMIT = 80
@@ -34,12 +42,14 @@ def codex_homes() -> list[Path]:
     homes: list[Path] = []
     candidates = [os.environ.get("AOC_CODEX_HOME"), os.environ.get("CODEX_HOME"), str(Path.home() / ".codex")]
     root_fallback = Path("/root/.codex")
-    if root_fallback.exists() and os.access(root_fallback, os.R_OK):
+    if safe_path_exists(root_fallback) and safe_path_access(root_fallback, os.R_OK | os.X_OK):
         candidates.append(str(root_fallback))
     for raw in candidates:
         if not raw:
             continue
-        p = Path(raw).expanduser().resolve()
+        p = safe_path_resolve(Path(raw))
+        if p is None:
+            continue
         if p not in homes:
             homes.append(p)
     return homes
@@ -118,9 +128,12 @@ def discover_codex_sessions(limit: int = CODEX_DISCOVERY_LIMIT, root: Path | Non
     files: list[Path] = []
     for home in codex_homes():
         sessions_dir = home / "sessions"
-        if sessions_dir.exists():
-            files.extend(p for p in sessions_dir.glob("**/*.jsonl") if p.is_file())
-    files = sorted(set(files), key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)[:limit]
+        if safe_path_exists(sessions_dir):
+            try:
+                files.extend(p for p in sessions_dir.glob("**/*.jsonl") if safe_path_is_file(p))
+            except OSError:
+                continue
+    files = sorted(set(files), key=safe_path_mtime, reverse=True)[:limit]
     rows: list[dict[str, Any]] = []
     for path in files:
         try:
