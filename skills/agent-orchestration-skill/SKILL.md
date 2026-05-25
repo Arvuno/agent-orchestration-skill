@@ -64,10 +64,11 @@ aoc gui --repo .
 
 The direct `python3 "$AOC_SKILL_DIR/scripts/*.py"` examples below are low-level internal control-plane commands for the root skill operator. Use them only when the public `aoc` route does not expose the required operation.
 
-For internal helper scripts, resolve the globally installed skill directory first. This keeps commands working after `npm install -g agentic-orchestration-control`, even when the target repo does not contain a repo-local `skills/` copy:
+For internal helper scripts, resolve the globally installed skill directory first, before any direct `python3 "$AOC_SKILL_DIR/scripts/..."` call. This keeps commands working after `npm install -g agentic-orchestration-control`, even when the target repo does not contain a repo-local `skills/` copy:
 
 ```bash
 AOC_SKILL_DIR="${AOC_SKILL_DIR:-${CODEX_HOME:-$HOME/.codex}/skills/agent-orchestration-skill}"
+test -d "$AOC_SKILL_DIR/scripts"
 ```
 
 ## Hard constraints
@@ -93,6 +94,9 @@ AOC_SKILL_DIR="${AOC_SKILL_DIR:-${CODEX_HOME:-$HOME/.codex}/skills/agent-orchest
 19. **Map-only stays read-only:** if the user asks only to map, research, audit, inventory, or discover, spawn at most one read-only worker and do not add implementers/reviewers unless the user asks to proceed.
 20. **No spawn before gates:** before the first native worker spawn, the root must run `orchestration_decider.py` and `budget_governor.py` using the intended worker IDs. Do not spawn a scout first and justify it afterward.
 21. **Declared worker identities:** budget and dispatch must use stable native Codex worker IDs from the active environment. The package profiles in `subagents/*.toml` are defaults, not a required registry. If the user has custom agents, map decider roles to those IDs with `--agent-aliases` and optionally pass an allowlist with `--allowed-agents` or `--agent-registry`; do not invent one-off nicknames during the run.
+22. **Budget actual reasoning:** budget checks must use the exact reasoning tier that will be used for each native worker. For custom agents whose names do not include `_low`, `_medium`, `_high`, or `_xhigh`, pass `--agent-reasoning worker=effort`.
+23. **No micro follow-up waves:** do not spawn a new worker just to add a low-risk assertion, tiny formatting cleanup, or one-line test hardening after verification. Route it to an active owner if still running, fold it into the verifier only when already planned, or report it as a follow-up unless it is a blocking defect or failed validation.
+24. **Worker events are structured:** every `worker_dispatched` event must include `--agent <worker-id>` and `--reasoning <actual-effort>` so the control room can track lanes and cost accurately.
 
 ## Step 1 — Classify before spawning
 
@@ -192,7 +196,7 @@ When a ledger exists, treat the run as event-driven. Emit compact state changes 
 python3 "$AOC_SKILL_DIR/scripts/event_emit.py" --root . --run-id <run_id> --event worker_dispatched --agent batch_implementer_medium --reasoning medium --summary "frontend cart implementation bundle dispatched"
 ```
 
-Use events for run creation, classification, DAG/budget gates, worker dispatch, Context Coverage, commands, handoffs, failures, memory updates, and final status. Events are compact JSONL records; long logs belong in `evidence/` files.
+Use events for run creation, classification, DAG/budget gates, worker dispatch, Context Coverage, commands, handoffs, failures, memory updates, and final status. Worker dispatch events must include both `--agent` and `--reasoning`. Events are compact JSONL records; long logs belong in `evidence/` files.
 
 ## Step 5 — Build a DAG only when orchestration is justified
 
@@ -218,11 +222,11 @@ Do not use `xhigh` for routine updates, isolated fixes, simple debugging, or sin
 
 Never use `xhigh` for bounded read-only reviews, short security reviews, docs research, evidence verification, mappers, scouts, routers, finalizers, or focused test/report checks. A prompt like “Read-only security review for ORC-009…” should be root synthesis plus at most one `security_reviewer_high`, not multiple scouts and not `xhigh`.
 
-Use `$AOC_SKILL_DIR/scripts/budget_governor.py` before spawning. Use the worker IDs that will actually be spawned. The bundled `subagents/*.toml` names are examples; custom user agents are valid. To enforce a configured registry, pass `--agent-registry <path>` or `--allowed-agents <csv>`. To keep decider gating with custom agents, pass the decider roles through `--recommended-agents` and map them with `--agent-aliases role=custom_worker`:
+Use `$AOC_SKILL_DIR/scripts/budget_governor.py` before spawning. Use the worker IDs and reasoning tiers that will actually be spawned. The bundled `subagents/*.toml` names are examples; custom user agents are valid. To enforce a configured registry, pass `--agent-registry <path>` or `--allowed-agents <csv>`. To keep decider gating with custom agents, pass the decider roles through `--recommended-agents` and map them with `--agent-aliases role=custom_worker`. For custom agents, pass `--agent-reasoning worker=effort` unless the agent registry declares `model_reasoning_effort`:
 
 ```bash
 python3 "$AOC_SKILL_DIR/scripts/budget_governor.py" --size M --agents code_mapper_low,batch_implementer_medium --reasoning medium --dispatch-chars <largest_packet_chars>
-python3 "$AOC_SKILL_DIR/scripts/budget_governor.py" --size M --recommended-agents batch_implementer_medium,verification_engine_medium --agents my_backend_worker,my_verifier --agent-aliases batch_implementer_medium=my_backend_worker,verification_engine_medium=my_verifier --reasoning medium --dispatch-chars <largest_packet_chars>
+python3 "$AOC_SKILL_DIR/scripts/budget_governor.py" --size M --recommended-agents batch_implementer_medium,verification_engine_medium --agents my_backend_worker,my_verifier --agent-aliases batch_implementer_medium=my_backend_worker,verification_engine_medium=my_verifier --agent-reasoning my_backend_worker=medium,my_verifier=medium --reasoning medium --dispatch-chars <largest_packet_chars>
 ```
 
 If `budget_governor.py` returns `OVER_BUDGET`, do not spawn. Reclassify, merge workers, reduce reasoning, or narrow the Dispatch Packet.
@@ -289,6 +293,7 @@ Before spawning implementers, group work by ownership:
 - Do not spawn docs/research workers for ordinary implementation just because docs were checked; root should do bounded Context7/docs lookup before dispatch.
 - Treat “go deep” as a request for stronger context coverage, validation, and review, not extra scouts.
 - Before any spawn, confirm the worker appears in the decider recommendation or the root has mapped the decider role to a declared custom worker ID, and the budget passed for the exact worker ID that will be spawned.
+- Do not spawn a fresh worker for low-risk test-hardening or a single missing assertion after successful verification. If the original worker is no longer active, record the gap in the final report unless it blocks acceptance.
 
 Use `$AOC_SKILL_DIR/scripts/batch_tasks.py` when useful.
 

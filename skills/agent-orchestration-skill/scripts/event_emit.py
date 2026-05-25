@@ -348,6 +348,8 @@ def emit_event(
     task: str | None = None,
     update_state: bool = True,
 ) -> dict[str, Any]:
+    if event == "worker_dispatched" and (not agent or not reasoning):
+        raise ValueError("worker_dispatched events require both agent and reasoning")
     rootp = Path(root).resolve()
     resolved = resolve_run_id(rootp, run_id)
     ev: dict[str, Any] = {
@@ -468,21 +470,25 @@ def main() -> None:
     ap.add_argument("--no-state", action="store_true", help="Only append JSONL event; do not update state/index")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
-    ev = emit_event(
-        root=args.root,
-        run_id=args.run_id,
-        event=args.event,
-        status=args.status,
-        phase_id=args.phase_id,
-        agent=args.agent,
-        summary=args.summary,
-        reasoning=args.reasoning,
-        scope=csv_items(args.scope),
-        files=csv_items(args.files),
-        metadata=parse_meta(args.meta, args.metadata_json),
-        task=args.task,
-        update_state=not args.no_state,
-    )
+    try:
+        ev = emit_event(
+            root=args.root,
+            run_id=args.run_id,
+            event=args.event,
+            status=args.status,
+            phase_id=args.phase_id,
+            agent=args.agent,
+            summary=args.summary,
+            reasoning=args.reasoning,
+            scope=csv_items(args.scope),
+            files=csv_items(args.files),
+            metadata=parse_meta(args.meta, args.metadata_json),
+            task=args.task,
+            update_state=not args.no_state,
+        )
+    except ValueError as exc:
+        print(f"REJECT: {exc}", file=sys.stderr)
+        sys.exit(2)
     if args.json:
         print(json.dumps(ev, indent=2, ensure_ascii=False))
     else:

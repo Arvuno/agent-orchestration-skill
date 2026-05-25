@@ -155,7 +155,7 @@ def validate_static() -> None:
     for phrase in ["No xhigh for short read-only work", "Use root synthesis or one focused", "at most one `security_reviewer_high`"]:
         if phrase.lower() not in text.lower():
             fail(f"missing xhigh/read-only review guardrail in SKILL.md: {phrase}")
-    for phrase in ["No non-action workers", "Map-only stays read-only", "No spawn before gates", "Declared worker identities", "Mapper/scout hard stop", "Go deep"]:
+    for phrase in ["No non-action workers", "Map-only stays read-only", "No spawn before gates", "Declared worker identities", "Budget actual reasoning", "No micro follow-up waves", "Worker events are structured", "Mapper/scout hard stop", "Go deep"]:
         if phrase.lower() not in text.lower():
             fail(f"missing non-action worker guardrail in SKILL.md: {phrase}")
     ok("validated single explicit-only skill")
@@ -243,6 +243,22 @@ def validate_static() -> None:
     )
     if custom_mapped["status"] != "OKAY":
         fail(f"budget governor should allow custom agents mapped from decider roles: {custom_mapped}")
+    custom_high_actual = budget.estimate(
+        ["backend", "tester"],
+        "medium",
+        "M",
+        False,
+        False,
+        6000,
+        recommended_agents={"batch_implementer_medium", "verification_engine_medium"},
+        agent_aliases={
+            "batch_implementer_medium": "backend",
+            "verification_engine_medium": "tester",
+        },
+        agent_reasoning={"backend": "high", "tester": "high"},
+    )
+    if custom_high_actual["status"] != "OVER_BUDGET" or custom_high_actual["score"] <= custom_high_actual["budget"]:
+        fail(f"budget governor should charge actual custom worker high reasoning, not fallback medium: {custom_high_actual}")
     custom_unmapped_scout = budget.estimate(
         ["memory_ownership_scout", "backend_implementer", "verification_reviewer"],
         "medium",
@@ -439,6 +455,12 @@ def validate_orchestration_flow() -> None:
         dispatch_path.parent.mkdir(parents=True, exist_ok=True)
         dispatch_path.write_text(packet, encoding="utf-8")
         event_emit.emit_event(repo, event="dispatch_compiled", run_id=run_id, agent="batch_implementer_medium", reasoning="medium", status="ready", summary="dispatch compiled", metadata={"chars": len(packet)})
+        try:
+            event_emit.emit_event(repo, event="worker_dispatched", run_id=run_id, agent="batch_implementer_medium", summary="missing reasoning")
+            fail("worker_dispatched without reasoning should be rejected")
+        except ValueError:
+            pass
+        event_emit.emit_event(repo, event="worker_dispatched", run_id=run_id, agent="batch_implementer_medium", reasoning="medium", status="running", summary="worker dispatched")
 
         handoff = """STATUS: success
 SUMMARY: targeted smoke handoff

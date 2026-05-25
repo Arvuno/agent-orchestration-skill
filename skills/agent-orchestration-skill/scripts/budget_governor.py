@@ -44,6 +44,15 @@ def split_aliases(s: str) -> dict[str, str]:
     return aliases
 
 
+def split_reasoning_map(s: str) -> dict[str, str]:
+    mapping = split_aliases(s)
+    bad = {agent: effort for agent, effort in mapping.items() if effort not in EFFORT_POINTS}
+    if bad:
+        joined = ", ".join(f"{agent}={effort}" for agent, effort in bad.items())
+        raise ValueError(f"Invalid reasoning values: {joined}")
+    return mapping
+
+
 def load_agent_registry(path: str | None) -> set[str] | None:
     """Load an optional configured agent allowlist.
 
@@ -85,7 +94,30 @@ def load_agent_registry(path: str | None) -> set[str] | None:
     return set(split_csv(text.replace("\n", ",")))
 
 
-def infer_reasoning(agent: str, fallback: str) -> str:
+def load_agent_reasoning(path: str | None) -> dict[str, str]:
+    if not path or tomllib is None:
+        return {}
+    p = Path(path)
+    if not p.is_dir():
+        return {}
+    reasoning: dict[str, str] = {}
+    for child in sorted(p.glob("*.toml")):
+        if child.name == "config.toml":
+            continue
+        try:
+            data = tomllib.loads(child.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        name = data.get("name")
+        effort = data.get("model_reasoning_effort")
+        if isinstance(name, str) and isinstance(effort, str) and effort in EFFORT_POINTS:
+            reasoning[name.strip()] = effort
+    return reasoning
+
+
+def infer_reasoning(agent: str, fallback: str, agent_reasoning: dict[str, str] | None = None) -> str:
+    if agent_reasoning and agent in agent_reasoning:
+        return agent_reasoning[agent]
     for k in ["xhigh", "high", "medium", "low"]:
         if agent.endswith("_" + k) or agent.endswith("-" + k):
             return k
@@ -102,12 +134,13 @@ def estimate(
     allowed_agents: set[str] | None = None,
     recommended_agents: set[str] | None = None,
     agent_aliases: dict[str, str] | None = None,
+    agent_reasoning: dict[str, str] | None = None,
 ) -> dict:
     detail = []
     score = 0
     recommendations: list[str] = []
     for a in agents:
-        r = infer_reasoning(a, reasoning)
+        r = infer_reasoning(a, reasoning, agent_reasoning)
         pts = AGENT_BASE + EFFORT_POINTS.get(r, EFFORT_POINTS[reasoning])
         # Scouting is useful but should stay cheap.
         if any(k in a for k in ["scout", "mapper", "researcher", "router", "finalizer"]):
@@ -142,10 +175,10 @@ def estimate(
     if len(agents) > SIZE_AGENT_CAP[size]:
         hard_failures.append(f"Too many agents for {size}: {len(agents)} > {SIZE_AGENT_CAP[size]}")
         recommendations.append("Merge related work into one bundled worker or run phases serially.")
-    if size in {"XS", "S", "M"} and any(infer_reasoning(a, reasoning) == "xhigh" for a in agents):
+    if size in {"XS", "S", "M"} and any(infer_reasoning(a, reasoning, agent_reasoning) == "xhigh" for a in agents):
         hard_failures.append("xhigh is not allowed for XS/S/M orchestration.")
         recommendations.append("Use medium for normal writes, high for complex writes, and reserve xhigh for large read-only strategy.")
-    if any(infer_reasoning(a, reasoning) == "xhigh" and any(k in a for k in ["scout", "mapper", "researcher", "reviewer", "router", "finalizer"]) for a in agents):
+    if any(infer_reasoning(a, reasoning, agent_reasoning) == "xhigh" and any(k in a for k in ["scout", "mapper", "researcher", "reviewer", "router", "finalizer"]) for a in agents):
         hard_failures.append("xhigh is not allowed for scout/mapper/researcher/reviewer/router/finalizer workers.")
         recommendations.append("Use low/medium for research and high only for focused security or regression review.")
     if dispatch_chars > 7000:
@@ -177,10 +210,17 @@ def main() -> None:
     ap.add_argument("--agent-registry", default="", help="Optional file or directory containing configured agent names")
     ap.add_argument("--recommended-agents", default="", help="Optional comma-separated decider-recommended roles/agents")
     ap.add_argument("--agent-aliases", default="", help="Optional comma-separated role=custom_worker mappings for custom native agents")
+    ap.add_argument("--agent-reasoning", default="", help="Optional comma-separated worker=low|medium|high|xhigh mappings for the exact native workers to spawn")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
     allowed_agents = set(split_csv(args.allowed_agents)) if args.allowed_agents.strip() else load_agent_registry(args.agent_registry or None)
     recommended_agents = set(split_csv(args.recommended_agents)) if args.recommended_agents.strip() else None
+    agent_reasoning = load_agent_reasoning(args.agent_registry or None)
+    try:
+        agent_reasoning.update(split_reasoning_map(args.agent_reasoning))
+    except ValueError as exc:
+        print(f"OVER_BUDGET: {exc}")
+        sys.exit(1)
     result = estimate(
         split_csv(args.agents),
         args.reasoning,
@@ -191,6 +231,7 @@ def main() -> None:
         allowed_agents=allowed_agents,
         recommended_agents=recommended_agents,
         agent_aliases=split_aliases(args.agent_aliases),
+        agent_reasoning=agent_reasoning,
     )
     if args.json:
         print(json.dumps(result, indent=2))

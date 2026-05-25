@@ -1,6 +1,6 @@
 {
   "name": "agentic-orchestration-control",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "private": false,
   "description": "Global Codex skill plus TUI/GUI control room and token-aware orchestration CLI for Codex subagents.",
   "license": "MIT",
