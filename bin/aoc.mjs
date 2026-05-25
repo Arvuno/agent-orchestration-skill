@@ -235,24 +235,43 @@ function stateExists(repo, runId) {
   return validRunId(runId) && existsSync(join(repo, '.orchestration', 'runs', runId, 'state.json'));
 }
 
-function currentRunFileId(repo) {
+const TERMINAL_RUN_STATUSES = new Set(['complete', 'completed', 'done', 'finished', 'success', 'succeeded', 'failed', 'blocked', 'cancelled', 'canceled']);
+const TERMINAL_RUN_EVENTS = new Set(['final_status', 'run_complete', 'run_completed']);
+
+function activeState(repo, runId) {
+  if (!stateExists(repo, runId)) return false;
+  const state = readJson(join(repo, '.orchestration', 'runs', runId, 'state.json'), {});
+  const status = String(state.status || '').trim().toLowerCase();
+  if (TERMINAL_RUN_STATUSES.has(status)) return false;
+  const lastEvent = state.last_event && typeof state.last_event === 'object' ? String(state.last_event.event || '').trim().toLowerCase() : '';
+  if (TERMINAL_RUN_EVENTS.has(lastEvent)) return false;
+  const events = Array.isArray(state.events) ? state.events.slice(-30) : [];
+  for (const ev of events) {
+    if (ev && typeof ev === 'object' && TERMINAL_RUN_EVENTS.has(String(ev.event || '').trim().toLowerCase())) return false;
+  }
+  return true;
+}
+
+function currentRunFileId(repo, activeOnly = false) {
   try {
     const runId = readFileSync(join(repo, '.orchestration', 'current-run'), 'utf8').trim().split(/\s+/)[0];
-    return stateExists(repo, runId) ? runId : null;
+    if (!stateExists(repo, runId)) return null;
+    return !activeOnly || activeState(repo, runId) ? runId : null;
   } catch {
     return null;
   }
 }
 
-function currentJsonRunId(repo) {
+function currentJsonRunId(repo, activeOnly = false) {
   const data = readJson(join(repo, '.orchestration', 'current.json'), {});
   const runId = data.current_run_id || data.run_id;
-  return stateExists(repo, runId) ? runId : null;
+  if (!stateExists(repo, runId)) return null;
+  return !activeOnly || activeState(repo, runId) ? runId : null;
 }
 
-function latestRunId(repo) {
+function latestRunId(repo, activeOnly = false) {
   const index = readJson(join(repo, '.orchestration', 'index.json'), {});
-  if (stateExists(repo, index.latest_run_id)) return index.latest_run_id;
+  if (stateExists(repo, index.latest_run_id) && (!activeOnly || activeState(repo, index.latest_run_id))) return index.latest_run_id;
   const runsDir = join(repo, '.orchestration', 'runs');
   if (!existsSync(runsDir)) return null;
   let latest = null;
@@ -264,6 +283,7 @@ function latestRunId(repo) {
       const state = readJson(statePath, {});
       const runId = state.run_id || entry.name;
       if (!stateExists(repo, runId)) continue;
+      if (activeOnly && !activeState(repo, runId)) continue;
       const updated = String(state.updated_at || state.created_at || '');
       if (!latest || updated > latest.updated) latest = { runId, updated };
     }
@@ -273,14 +293,15 @@ function latestRunId(repo) {
   return latest ? latest.runId : null;
 }
 
-function selectedRun(common, repo) {
+function selectedRun(common, repo, opts = {}) {
+  const activeOnly = Boolean(opts.activeOnly);
   if (common.runId && common.runId !== 'current') return { runId: common.runId, source: 'cli' };
   if (!common.runId && process.env.AOC_RUN_ID && process.env.AOC_RUN_ID !== 'current') return { runId: process.env.AOC_RUN_ID, source: 'env' };
-  const currentRun = currentRunFileId(repo);
+  const currentRun = currentRunFileId(repo, activeOnly);
   if (currentRun) return { runId: currentRun, source: 'current-run' };
-  const currentJson = currentJsonRunId(repo);
+  const currentJson = currentJsonRunId(repo, activeOnly);
   if (currentJson) return { runId: currentJson, source: 'current.json' };
-  const latest = latestRunId(repo);
+  const latest = latestRunId(repo, activeOnly);
   if (latest) return { runId: latest, source: 'latest' };
   return { runId: null, source: 'none' };
 }
@@ -569,7 +590,7 @@ function route(rawArgs) {
   }
 
   const repo = resolveRepo(common);
-  const selected = selectedRun(common, repo);
+  const selected = selectedRun(common, repo, { activeOnly: cmd === 'current' && !common.runId && !process.env.AOC_RUN_ID });
   const runId = selected.runId || 'latest';
   const resolvedRunArgs = selected.runId ? ['--run-id', selected.runId] : [];
   const passiveRunArgs = selected.runId ? ['--run-id', selected.runId] : [];

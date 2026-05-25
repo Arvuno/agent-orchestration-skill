@@ -37,6 +37,8 @@ ROLL_OUT_RE = re.compile(r"^rollout-(?P<stamp>.+)-(?P<id>[A-Za-z0-9-]{12,})\.jso
 CODEX_IMPORT_SOURCE = "codex_session_import"
 LEGACY_CODEX_IMPORT_SOURCE = "codex_session"
 CODEX_IMPORT_SOURCES = {CODEX_IMPORT_SOURCE, LEGACY_CODEX_IMPORT_SOURCE}
+TERMINAL_RUN_STATUSES = {"complete", "completed", "done", "finished", "success", "succeeded", "failed", "blocked", "cancelled", "canceled"}
+TERMINAL_RUN_EVENTS = {"final_status", "run_complete", "run_completed"}
 
 
 def safe_path_exists(path: Path) -> bool:
@@ -150,6 +152,45 @@ def set_current(root: Path, run_id: str, source: str = "manual") -> dict[str, An
     return payload
 
 
+def is_active_state(state: dict[str, Any]) -> bool:
+    status = str(state.get("status") or "").strip().lower()
+    if status in TERMINAL_RUN_STATUSES:
+        return False
+    last_event = state.get("last_event") if isinstance(state.get("last_event"), dict) else {}
+    if str(last_event.get("event") or "").strip().lower() in TERMINAL_RUN_EVENTS:
+        return False
+    events = state.get("events")
+    if isinstance(events, list):
+        for ev in reversed(events[-30:]):
+            if isinstance(ev, dict) and str(ev.get("event") or "").strip().lower() in TERMINAL_RUN_EVENTS:
+                return False
+    return True
+
+
+def active_state_exists(root: Path, run_id: str) -> bool:
+    path = state_path(root, run_id)
+    if not path.exists():
+        return False
+    state = read_json(path, {})
+    return isinstance(state, dict) and is_active_state(state)
+
+
+def latest_active_run_id(root: Path) -> str | None:
+    runs: list[tuple[str, str]] = []
+    for sp in (root / ".orchestration" / "runs").glob("*/state.json"):
+        try:
+            state = json.loads(sp.read_text(encoding="utf-8"))
+            run_id = validate_id(state.get("run_id") or sp.parent.name, "run_id")
+            if is_active_state(state):
+                runs.append((state.get("updated_at") or state.get("created_at") or "", run_id))
+        except Exception:
+            continue
+    if not runs:
+        return None
+    runs.sort(reverse=True)
+    return runs[0][1]
+
+
 def resolve_selected_run(root: Path, requested: str | None = None) -> str | None:
     if requested and requested != "current":
         if requested == "latest":
@@ -159,11 +200,11 @@ def resolve_selected_run(root: Path, requested: str | None = None) -> str | None
     if current:
         try:
             current = validate_id(current, "current_run_id")
-            if state_path(root, current).exists():
+            if active_state_exists(root, current):
                 return current
         except ValueError:
             pass
-    return latest_run_id(root)
+    return latest_active_run_id(root)
 
 
 def iter_session_files(home: Path | Iterable[Path]) -> list[Path]:

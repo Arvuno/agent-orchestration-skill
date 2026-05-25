@@ -45,6 +45,8 @@ aoc init --repo . --task "<task derived from the user prompt>" --json
 
 Store the selected `run_id` in root context and use it for every later event, capsule, dispatch, handoff, verification record, and final summary. Do not create a second run if `aoc current` already selected an active repo run. Emit a compact `skill_invoked` event after attach/init when a run ledger exists.
 
+`aoc current` is an active-run lookup, not a historical lookup. If the previous run has a terminal status or a `final_status`/`run_completed` event, start a new run with `aoc init` instead of appending fresh work to the old run.
+
 ## Prime directive
 
 Act as a **task compiler, context-preserving control-plane operator, and event-driven run supervisor**, not a prompt broadcaster. Classify the work, preserve the essential context, choose the cheapest adequate reasoning tier, batch related actions, compile minimal Dispatch Packets, track state, and collect concise Handoff Packets. The Context Capsule is persistent storage; a Dispatch Packet is only a small scoped slice for one worker. The capsule stays on disk; workers receive only the narrow slice they need.
@@ -97,6 +99,7 @@ test -d "$AOC_SKILL_DIR/scripts"
 22. **Budget actual reasoning:** budget checks must use the exact reasoning tier that will be used for each native worker. For custom agents whose names do not include `_low`, `_medium`, `_high`, or `_xhigh`, pass `--agent-reasoning worker=effort`.
 23. **No micro follow-up waves:** do not spawn a new worker just to add a low-risk assertion, tiny formatting cleanup, or one-line test hardening after verification. Route it to an active owner if still running, fold it into the verifier only when already planned, or report it as a follow-up unless it is a blocking defect or failed validation.
 24. **Worker events are structured:** every `worker_dispatched` event must include `--agent <worker-id>` and `--reasoning <actual-effort>` so the control room can track lanes and cost accurately.
+25. **No invented known-file counts:** pass `known-files > 0` only when the user named concrete paths or the root has allowed source evidence. Do not expand “go deep” into an audit/re-audit prompt or inflate known file count to force L/XL orchestration.
 
 ## Step 1 — Classify before spawning
 
@@ -111,6 +114,8 @@ Classify the task using:
 - Worktree state: clean, dirty, unknown
 
 Run `$AOC_SKILL_DIR/scripts/orchestration_decider.py` before any worker spawn. This is mandatory for every non-trivial task and for every proposed scout/research/review worker.
+
+Use the user’s actual task wording for `--task`. Do not rewrite a cohesive implementation request into “audit architecture, implement, verify, and re-audit” merely because the user said “go deep”. If the root has not read source and the user did not name files, use `--known-files 0`.
 
 ```bash
 python3 "$AOC_SKILL_DIR/scripts/orchestration_decider.py" \
@@ -222,7 +227,7 @@ Do not use `xhigh` for routine updates, isolated fixes, simple debugging, or sin
 
 Never use `xhigh` for bounded read-only reviews, short security reviews, docs research, evidence verification, mappers, scouts, routers, finalizers, or focused test/report checks. A prompt like “Read-only security review for ORC-009…” should be root synthesis plus at most one `security_reviewer_high`, not multiple scouts and not `xhigh`.
 
-Use `$AOC_SKILL_DIR/scripts/budget_governor.py` before spawning. Use the worker IDs and reasoning tiers that will actually be spawned. The bundled `subagents/*.toml` names are examples; custom user agents are valid. To enforce a configured registry, pass `--agent-registry <path>` or `--allowed-agents <csv>`. To keep decider gating with custom agents, pass the decider roles through `--recommended-agents` and map them with `--agent-aliases role=custom_worker`. For custom agents, pass `--agent-reasoning worker=effort` unless the agent registry declares `model_reasoning_effort`:
+Use `$AOC_SKILL_DIR/scripts/budget_governor.py` before spawning. Use the worker IDs and reasoning tiers that will actually be spawned. The bundled `subagents/*.toml` names are examples; custom user agents are valid. To enforce a configured registry, pass `--agent-registry <path>` or `--allowed-agents <csv>`. To keep decider gating with custom agents, pass the decider roles through `--recommended-agents` and map them with `--agent-aliases role=custom_worker`. For custom agents, pass `--agent-reasoning worker=effort` unless the agent registry declares `model_reasoning_effort`. Reasoning above the decider role is rejected unless `--allow-reasoning-upgrade` is explicitly used and the gate event records why:
 
 ```bash
 python3 "$AOC_SKILL_DIR/scripts/budget_governor.py" --size M --agents code_mapper_low,batch_implementer_medium --reasoning medium --dispatch-chars <largest_packet_chars>

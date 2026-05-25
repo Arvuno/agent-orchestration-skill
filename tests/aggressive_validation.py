@@ -195,6 +195,23 @@ def validate_static() -> None:
         fail(f"cohesive implementation should not spawn non-action mapper/docs workers: {memory_rec}")
     if "batch_implementer_medium" not in memory_rec.default_agents and "complex_implementer_high" not in memory_rec.default_agents:
         fail(f"cohesive implementation should dispatch an implementer with context coverage: {memory_rec}")
+    inflated_rec = decider.decide(
+        task="Improve Hermes memory system deeply: audit current memory architecture, identify high-value production-ready improvements, implement scoped fixes with tests, verify and re-audit",
+        known_files=9,
+        surfaces=["backend", "tests", "docs"],
+        risk="high",
+        ambiguity="high",
+        requires_browser=False,
+        requires_docs=True,
+        failing_tests=0,
+        needs_architecture=False,
+        root_can_edit=False,
+        force_delegate=True,
+    )
+    if inflated_rec.size == "XL" or "strategy_architect_xhigh" in inflated_rec.default_agents:
+        fail(f"decider should not let prompt-expanded go-deep wording inflate a cohesive task to XL/xhigh: {inflated_rec}")
+    if not any("Known files reset to 0" in note for note in inflated_rec.notes):
+        fail(f"decider should explain invented known file counts when root has no source evidence: {inflated_rec}")
     map_only_rec = decider.decide(
         task="Map memory subsystem architecture and identify owners only",
         known_files=0,
@@ -257,8 +274,25 @@ def validate_static() -> None:
         },
         agent_reasoning={"backend": "high", "tester": "high"},
     )
-    if custom_high_actual["status"] != "OVER_BUDGET" or custom_high_actual["score"] <= custom_high_actual["budget"]:
-        fail(f"budget governor should charge actual custom worker high reasoning, not fallback medium: {custom_high_actual}")
+    if custom_high_actual["status"] != "OVER_BUDGET" or not any("Reasoning upgrade requires explicit approval" in f for f in custom_high_actual["hard_failures"]):
+        fail(f"budget governor should reject unapproved custom worker reasoning upgrades, not fallback to medium: {custom_high_actual}")
+    approved_high_actual = budget.estimate(
+        ["backend", "tester"],
+        "medium",
+        "M",
+        False,
+        False,
+        6000,
+        recommended_agents={"complex_implementer_high", "security_reviewer_high"},
+        agent_aliases={
+            "complex_implementer_high": "backend",
+            "security_reviewer_high": "tester",
+        },
+        agent_reasoning={"backend": "high", "tester": "high"},
+        allow_reasoning_upgrade=True,
+    )
+    if approved_high_actual["status"] != "OVER_BUDGET" or approved_high_actual["score"] <= approved_high_actual["budget"]:
+        fail(f"budget governor should charge approved high reasoning against the budget: {approved_high_actual}")
     custom_unmapped_scout = budget.estimate(
         ["memory_ownership_scout", "backend_implementer", "verification_reviewer"],
         "medium",
@@ -420,6 +454,32 @@ def validate_orchestration_flow() -> None:
         context_capsule.add_many(capsule, "confirmed_facts", ["Browser QA reproduced subtotal mismatch"])
         context_capsule.add_many(capsule, "acceptance_criteria", ["subtotal updates immediately"])
         context_capsule.save(capsule_path, capsule)
+        overwrite_args = SimpleNamespace(
+            task="replacement",
+            goal="",
+            run_id=run_id,
+            task_id="",
+            out=str(capsule_path),
+            force=False,
+            require_must_read=True,
+            must_read=["app/cart/page.tsx"],
+            optional=[],
+            forbidden=[],
+            fact=[],
+            rejected=[],
+            decision=[],
+            ownership=[],
+            acceptance=[],
+            validation=[],
+            blocker=[],
+            evidence=[],
+        )
+        try:
+            context_capsule.cmd_init(overwrite_args)
+            fail("context capsule init should refuse to overwrite an existing capsule without --force")
+        except SystemExit as exc:
+            if "already exists" not in str(exc):
+                fail(f"context capsule overwrite failed for the wrong reason: {exc}")
         event_emit.emit_event(repo, event="context_capsule_created", run_id=run_id, status="ok", summary="capsule created")
 
         plan = dag_planner.build_plan("cart subtotal control room smoke", ["frontend", "tests"], "M", "medium", "medium", False, False, False)

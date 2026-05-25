@@ -20,6 +20,7 @@ except ModuleNotFoundError:  # pragma: no cover - Python <3.11 fallback for runt
     tomllib = None
 
 EFFORT_POINTS = {"low": 1, "medium": 2, "high": 4, "xhigh": 8}
+EFFORT_ORDER = {"low": 0, "medium": 1, "high": 2, "xhigh": 3}
 AGENT_BASE = 2
 SIZE_BUDGET = {"XS": 4, "S": 7, "M": 14, "L": 25, "XL": 40}
 SIZE_AGENT_CAP = {"XS": 1, "S": 2, "M": 3, "L": 5, "XL": 6}
@@ -135,6 +136,7 @@ def estimate(
     recommended_agents: set[str] | None = None,
     agent_aliases: dict[str, str] | None = None,
     agent_reasoning: dict[str, str] | None = None,
+    allow_reasoning_upgrade: bool = False,
 ) -> dict:
     detail = []
     score = 0
@@ -172,6 +174,21 @@ def estimate(
         if unexpected_agents:
             hard_failures.append(f"Agents not recommended by decider or mapped aliases: {', '.join(unexpected_agents)}")
             recommendations.append("Budget only decider-recommended roles, or map recommended roles to custom worker IDs with --agent-aliases role=custom_worker.")
+        if not allow_reasoning_upgrade:
+            upgrades: list[str] = []
+            role_for_agent = {role: role for role in recommended_agents}
+            role_for_agent.update({target: source for source, target in aliases.items() if source in recommended_agents})
+            for agent in agents:
+                role = role_for_agent.get(agent)
+                if not role:
+                    continue
+                role_reasoning = infer_reasoning(role, reasoning, None)
+                actual_reasoning = infer_reasoning(agent, reasoning, agent_reasoning)
+                if EFFORT_ORDER[actual_reasoning] > EFFORT_ORDER[role_reasoning]:
+                    upgrades.append(f"{agent}:{actual_reasoning}>{role}:{role_reasoning}")
+            if upgrades:
+                hard_failures.append(f"Reasoning upgrade requires explicit approval: {', '.join(upgrades)}")
+                recommendations.append("Keep custom worker reasoning at or below the decider role, or pass --allow-reasoning-upgrade with a documented reason in the gate event.")
     if len(agents) > SIZE_AGENT_CAP[size]:
         hard_failures.append(f"Too many agents for {size}: {len(agents)} > {SIZE_AGENT_CAP[size]}")
         recommendations.append("Merge related work into one bundled worker or run phases serially.")
@@ -211,6 +228,7 @@ def main() -> None:
     ap.add_argument("--recommended-agents", default="", help="Optional comma-separated decider-recommended roles/agents")
     ap.add_argument("--agent-aliases", default="", help="Optional comma-separated role=custom_worker mappings for custom native agents")
     ap.add_argument("--agent-reasoning", default="", help="Optional comma-separated worker=low|medium|high|xhigh mappings for the exact native workers to spawn")
+    ap.add_argument("--allow-reasoning-upgrade", action="store_true", help="Permit custom worker reasoning above the decider-recommended role")
     ap.add_argument("--json", action="store_true")
     args = ap.parse_args()
     allowed_agents = set(split_csv(args.allowed_agents)) if args.allowed_agents.strip() else load_agent_registry(args.agent_registry or None)
@@ -232,6 +250,7 @@ def main() -> None:
         recommended_agents=recommended_agents,
         agent_aliases=split_aliases(args.agent_aliases),
         agent_reasoning=agent_reasoning,
+        allow_reasoning_upgrade=args.allow_reasoning_upgrade,
     )
     if args.json:
         print(json.dumps(result, indent=2))

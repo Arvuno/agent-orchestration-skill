@@ -460,7 +460,7 @@ def main() -> None:
     ap.add_argument("--status")
     ap.add_argument("--phase-id")
     ap.add_argument("--agent")
-    ap.add_argument("--summary", default="")
+    ap.add_argument("--summary", nargs="+", default=[], help="Summary text. Quoting is recommended but not required when this is the last option.")
     ap.add_argument("--reasoning")
     ap.add_argument("--scope", help="Comma/semicolon separated scope labels")
     ap.add_argument("--files", help="Comma/semicolon separated files/areas")
@@ -478,7 +478,7 @@ def main() -> None:
             status=args.status,
             phase_id=args.phase_id,
             agent=args.agent,
-            summary=args.summary,
+            summary=" ".join(args.summary),
             reasoning=args.reasoning,
             scope=csv_items(args.scope),
             files=csv_items(args.files),

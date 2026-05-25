@@ -205,6 +205,9 @@ def render_text(capsule: dict[str, Any], max_chars: int = 1600, focus: list[str]
 
 
 def cmd_init(args: argparse.Namespace) -> None:
+    out = Path(args.out)
+    if out.exists() and not args.force:
+        raise SystemExit(f"Context Capsule already exists: {out}. Use the add/merge-handoff commands to update it, or pass --force to replace it.")
     capsule = empty_capsule(args.task, args.goal or "", args.run_id or "", args.task_id or "")
     for section, attr in [
         ("must_read", "must_read"), ("useful_optional", "optional"), ("forbidden", "forbidden"),
@@ -215,7 +218,6 @@ def cmd_init(args: argparse.Namespace) -> None:
         add_many(capsule, section, getattr(args, attr))
     if args.require_must_read and not capsule["must_read"]:
         raise SystemExit("Context Capsule requires at least one --must-read entry when --require-must-read is set.")
-    out = Path(args.out)
     save(out, capsule)
     maybe_emit(out, "context_capsule_created", capsule.get("run_id"), f"Context Capsule created for {args.task}", {"must_read": len(capsule["must_read"]), "capsule": str(out)})
     print(json.dumps({"status": "OKAY", "capsule": str(out), "must_read": len(capsule["must_read"])}, indent=2))
@@ -319,6 +321,7 @@ def main() -> None:
     p.add_argument("--run-id", default="")
     p.add_argument("--task-id", default="")
     p.add_argument("--out", default=".orchestration/context_capsule.json")
+    p.add_argument("--force", action="store_true", help="Replace an existing capsule file. Without this, init refuses to overwrite.")
     p.add_argument("--require-must-read", action="store_true", help="Fail if no --must-read entries are provided")
     add_common_init_args(p)
     p.set_defaults(func=cmd_init)

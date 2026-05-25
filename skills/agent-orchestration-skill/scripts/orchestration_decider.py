@@ -11,6 +11,7 @@ AMB_ORDER = {"low": 0, "medium": 1, "high": 2}
 HIGH_RISK_SURFACES = {"auth", "payment", "payments", "security", "database", "data", "migration", "concurrency", "production"}
 UI_SURFACES = {"frontend", "ui", "browser"}
 DOC_SURFACES = {"docs", "research", "dependency"}
+PATHLIKE_RE = r"[/\\]|\.(py|js|ts|tsx|jsx|go|rs|java|kt|swift|md|toml|yaml|yml|json|sql)\b"
 IMPLEMENTATION_TERMS = {
     "fix", "improve", "implement", "patch", "change", "update", "proceed",
     "build", "add", "harden", "cleanup", "clean up", "go deep",
@@ -69,6 +70,11 @@ def cohesive_surfaces(sset: set[str]) -> bool:
     return False
 
 
+def task_mentions_files(task_l: str) -> bool:
+    import re
+    return bool(re.search(PATHLIKE_RE, task_l))
+
+
 def should_spawn_mapper(task_l: str, known_files: int, sset: set[str], amb_i: int, needs_architecture: bool, requires_docs: bool) -> bool:
     """Return true only when a mapper has distinct value over implementer coverage."""
     implementation_intent = has_any(task_l, IMPLEMENTATION_TERMS)
@@ -102,13 +108,17 @@ def decide(
     amb_i = AMB_ORDER[ambiguity]
     high_risk_surface = bool(sset & HIGH_RISK_SURFACES)
     task_l = task.lower()
+    notes: list[str] = []
+    if known_files > 0 and not task_mentions_files(task_l) and not root_can_edit:
+        known_files = 0
+        notes.append("Known files reset to 0 because the prompt contains no concrete file/path evidence and root source inspection is disabled.")
     read_only_terms = [
         "read-only", "readonly", "do not edit", "do not modify", "do not delete",
         "do not format", "do not stage", "no edits", "no write", "no writes",
     ]
     review_terms = ["review", "audit", "security review", "regression review"]
     read_only_review = any(t in task_l for t in read_only_terms) and any(t in task_l for t in review_terms)
-    architecture_terms = ["architecture", "architect", "design", "structure", "structuring", "major feature", "new feature", "system design", "redesign", "refactor architecture"]
+    architecture_terms = ["system design", "redesign", "refactor architecture", "architectural redesign", "major feature", "new feature"]
     if not needs_architecture and any(term in task_l for term in architecture_terms) and (amb_i >= 1 or risk_i >= 1 or len(sset) >= 2 or known_files == 0):
         needs_architecture = True
     requires_browser = requires_browser or bool(sset & UI_SURFACES)
@@ -116,8 +126,6 @@ def decide(
     implementation_intent = has_any(task_l, IMPLEMENTATION_TERMS)
     explicit_research = has_any(task_l, SCOUT_TERMS) and not implementation_intent
     mapper_needed = should_spawn_mapper(task_l, known_files, sset, amb_i, needs_architecture, requires_docs)
-    notes: list[str] = []
-
     if read_only_review:
         size = "S" if known_files <= 8 and risk_i <= 2 else "M"
         max_agents = 1

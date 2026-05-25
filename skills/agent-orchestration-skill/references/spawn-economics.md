@@ -18,7 +18,7 @@ Before spawning, the root asks:
 
 If the answer is no, do not spawn.
 
-Before any native worker spawn, run the decider and budget governor. The worker must be present in the decider recommendation, or the root must map the recommended role to a declared custom native Codex worker ID with `--agent-aliases`. The budget must pass for the exact worker ID and reasoning tier that will be spawned; use `--agent-reasoning worker=effort` for custom workers unless a supplied registry declares `model_reasoning_effort`. The bundled `subagents/*.toml` profiles are defaults, not a required registry.
+Before any native worker spawn, run the decider and budget governor. The worker must be present in the decider recommendation, or the root must map the recommended role to a declared custom native Codex worker ID with `--agent-aliases`. The budget must pass for the exact worker ID and reasoning tier that will be spawned; use `--agent-reasoning worker=effort` for custom workers unless a supplied registry declares `model_reasoning_effort`. The bundled `subagents/*.toml` profiles are defaults, not a required registry. Reasoning above the decider role is a hard stop unless explicitly approved with `--allow-reasoning-upgrade`.
 
 ## Default caps
 
@@ -53,4 +53,5 @@ Before any native worker spawn, run the decider and budget governor. The worker 
 - The Dispatch Packet has become large because the scope is unclear.
 - The worker was not produced by `orchestration_decider.py`, was not a declared custom worker for that role, or was budgeted with an ad hoc nickname invented for the run.
 - The budget used medium/default reasoning but the native spawn will use high/xhigh.
+- A custom worker is mapped from a `_low`/`_medium` role but is budgeted at a higher reasoning tier without explicit approval.
 - The only task is a low-risk missing assertion, small test hardening, formatting, or cleanup after verification already passed. Route it to an active owner or record it as follow-up unless it blocks acceptance.

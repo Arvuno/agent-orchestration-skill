@@ -167,6 +167,9 @@ const useJson = parseJsonResult(run('node', [CLI, 'use', 'npm-run', '--repo', re
 if (useJson.run_id !== 'npm-run') throw new Error(`use did not select npm-run: ${JSON.stringify(useJson)}`);
 const selectedJson = parseJsonResult(run('node', [CLI, 'current', '--repo', repo, '--json']), 'current after use');
 if (selectedJson.run_id !== 'npm-run') throw new Error(`current did not report selected npm-run: ${JSON.stringify(selectedJson)}`);
+run('python3', [join(scripts, 'event_emit.py'), '--root', repo, '--run-id', 'npm-run', '--event', 'final_status', '--summary', 'npm smoke complete']);
+const currentAfterFinal = parseJsonResult(run('node', [CLI, 'current', '--repo', repo, '--json']), 'current after final_status');
+if (currentAfterFinal.run_id === 'npm-run') throw new Error(`current should ignore terminal runs with final_status: ${JSON.stringify(currentAfterFinal)}`);
 pass('aoc current/use manage current run');
 
 const outside = join(td, 'outside');
@@ -310,7 +313,7 @@ for (const command of codexSessionShimCommands) {
 }
 pass('direct bash install.sh aoc shim supports sessions/current/use/import/watch/search');
 
-run('python3', [join(scripts, 'event_emit.py'), '--root', repo, '--run-id', 'npm-run', '--event', 'worker_dispatched', '--agent', 'batch_implementer_medium', '--reasoning', 'medium', '--summary', 'npm smoke worker']);
+run('python3', [join(scripts, 'event_emit.py'), '--root', repo, '--run-id', 'npm-run', '--event', 'worker_dispatched', '--agent', 'batch_implementer_medium', '--reasoning', 'medium', '--summary', 'npm', 'smoke', 'worker']);
 const dispatchDir = join(repo, '.orchestration', 'runs', 'npm-run', 'dispatches');
 run('mkdir', ['-p', dispatchDir]);
 writeFileSync(join(dispatchDir, 'P1.md'), 'TASK: npm smoke\nMUST_READ:\n- package.json\n', 'utf8');
