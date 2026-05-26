@@ -343,3 +343,6 @@ Only for unusually large, ambiguous, or architecture-heavy problems. It should n
 ## License
 
 [MIT License](LICENSE)
+
+## Contributing
+PRs welcome!
