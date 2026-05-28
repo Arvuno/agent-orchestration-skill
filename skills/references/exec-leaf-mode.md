@@ -10,7 +10,7 @@ that process is not automatically protected by a custom agent TOML. It may behav
 
 ## Why this matters
 
-Project config may enable multi-agent tools globally so the root orchestrator can spawn workers. A manually launched `codex exec` verifier can inherit that global config. If older AGENTS.md text says every substantial task should spawn agents or includes routing fields such as `next_handoff`, the verifier may try to coordinate instead of simply running checks.
+Project config may enable multi-agent tools globally so the root orchestrator can spawn workers. A mannually launched `codex exec` verifier can inherit that global config. If older AGENTS.md text says every substantial task should spawn agents or includes routing fields such as `next_handoff`, the verifier may try to coordinate instead of simply running checks.
 
 ## Required launch pattern for verifier exec jobs
 
