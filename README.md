@@ -340,6 +340,10 @@ Because it usually wastes tokens and fragments ownership. This skill prefers bat
 
 Only for unusually large, ambiguous, or architecture-heavy problems. It should not be the default for implementation, testing, or file discovery.
 
+## Contributing
+
+We welcome contributions! Please feel free to submit a Pull Request or open an issue for bug reports and feature suggestions.
+
 ## License
 
 [MIT License](LICENSE)
