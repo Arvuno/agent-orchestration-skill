@@ -343,3 +343,5 @@ Only for unusually large, ambiguous, or architecture-heavy problems. It should n
 ## License
 
 [MIT License](LICENSE)
+
+- Documentation updated for clarity
