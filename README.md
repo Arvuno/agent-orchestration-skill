@@ -350,3 +350,6 @@ We welcome contributions! Please feel free to submit a Pull Request or open an i
 
 ## Contributing
 PRs welcome!
+
+<!-- Contributor: Arvuno - documentation update -->
+
